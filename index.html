@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Data engineering concepts, explained by watching them work</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f3f5f7;--surface:#fff;--ink:#14212b;--mute:#5b6b78;--line:#d5dde3;--accent:#0b7a75;--a2:#3b6fd4;--a3:#c9741a;--a4:#8a5cc2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--a4:#b79cf0;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--a4:#b79cf0;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:40px 16px 56px}
+h1{font-size:clamp(30px,6vw,52px);line-height:1.05;margin:0 0 10px;letter-spacing:-.025em}
+.lede{color:var(--mute);max-width:60ch;margin:0 0 8px}
+.hint{font:400 13px "IBM Plex Mono",monospace;color:var(--mute);margin:0 0 28px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+a.card{display:flex;flex-direction:column;text-decoration:none;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;transition:transform .15s ease,border-color .15s ease}
+a.card:hover{border-color:var(--accent);transform:translateY(-3px)}
+a.card:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.art{height:120px;border-bottom:1px solid var(--line);background:var(--bg)}
+.art svg{width:100%;height:100%;display:block}
+.body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:8px;flex:1}
+.body h2{margin:0;font-size:22px;line-height:1.2;letter-spacing:-.01em}
+.body p{margin:0;color:var(--mute);flex:1}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tags span{font:500 11px "IBM Plex Mono",monospace;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+.open{font-weight:700;color:var(--accent)}
+footer{margin-top:32px;font-size:13px;color:var(--mute)}
+@media (prefers-reduced-motion:reduce){a.card{transition:none}a.card:hover{transform:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Data engineering concepts, explained by watching them work</h1>
+<p class="lede">Pick a concept to open it. Each one is an interactive page with animation, sound and a narrator, so you can see the idea instead of just reading about it.</p>
+<p class="hint">Sound and voice start after your first click on a page.</p>
+<div class="grid" id="grid"></div>
+<noscript><p>This page needs JavaScript to list the concepts.</p></noscript>
+<footer>To add a concept: upload its .html file to the repository, then add one line to the CONCEPTS list in this file’s script.</footer>
+</main>
+
+<script>
+/* Add a new concept by adding one object here. "file" is the exact file name in the repository. */
+var CONCEPTS=[
+ {file:"Concepts of Data Engineering.html",title:"Concepts of Data Engineering",
+  text:"A hub of interactive 3D models for core ideas such as idempotency and change data capture.",tags:["3D","Interactive"],art:"cube"},
+ {file:"Database normalization, explained by watching it work.html",title:"Database normalization",
+  text:"Watch a messy table split through 1NF, 2NF, 3NF and BCNF, then run update, insert and delete tests.",tags:["1NF to BCNF","Audio","Voice"],art:"tables"},
+ {file:"Informatica partitioning, explained by watching it work.html",title:"Informatica partitioning",
+  text:"See six partition types deal rows into parallel lanes, and hear which one keeps regions together.",tags:["6 techniques","Audio","Voice"],art:"lanes"},
+ {file:"PySpark broadcast joins, explained by watching them work.html",title:"PySpark broadcast joins",
+  text:"Shuffle versus broadcast across executors, plus an 8-scenario challenge to practise real decisions.",tags:["Quiz","Audio","Voice"],art:"spark"}
+];
+var ART={
+ cube:'<svg viewBox="0 0 320 120" aria-hidden="true"><g stroke="var(--mute)" stroke-width="2" fill="none"><path d="M120 50l40-18 40 18v40l-40 18-40-18z" fill="var(--accent)" fill-opacity=".25"/><path d="M120 50l40 18 40-18M160 68v40"/></g><circle cx="70" cy="60" r="9" fill="var(--a2)"/><circle cx="250" cy="60" r="9" fill="var(--a3)"/></svg>',
+ tables:'<svg viewBox="0 0 320 120" aria-hidden="true"><rect x="30" y="30" width="120" height="60" rx="5" fill="var(--accent)" fill-opacity=".3"/><path d="M160 60h26" stroke="var(--mute)" stroke-width="2"/><g fill="var(--a2)"><rect x="200" y="22" width="80" height="22" rx="4"/><rect x="200" y="50" width="80" height="22" rx="4"/><rect x="200" y="78" width="80" height="22" rx="4" fill="var(--a3)"/></g></svg>',
+ lanes:'<svg viewBox="0 0 320 120" aria-hidden="true"><g><rect x="30" y="22" width="260" height="22" rx="4" fill="var(--accent)" fill-opacity=".3"/><rect x="30" y="50" width="260" height="22" rx="4" fill="var(--a4)" fill-opacity=".3"/><rect x="30" y="78" width="260" height="22" rx="4" fill="var(--a3)" fill-opacity=".3"/></g><g fill="var(--accent)"><rect x="50" y="26" width="26" height="14" rx="3"/><rect x="84" y="26" width="26" height="14" rx="3"/></g><g fill="var(--a4)"><rect x="50" y="54" width="26" height="14" rx="3"/><rect x="84" y="54" width="26" height="14" rx="3"/><rect x="118" y="54" width="26" height="14" rx="3"/></g><g fill="var(--a3)"><rect x="50" y="82" width="26" height="14" rx="3"/></g></svg>',
+ spark:'<svg viewBox="0 0 320 120" aria-hidden="true"><g stroke="var(--line)" stroke-width="2"><rect x="30" y="34" width="70" height="56" rx="5" fill="var(--surface)"/><rect x="125" y="34" width="70" height="56" rx="5" fill="var(--surface)"/><rect x="220" y="34" width="70" height="56" rx="5" fill="var(--surface)"/></g><g fill="var(--accent)"><rect x="42" y="64" width="46" height="18" rx="4" fill-opacity=".85"/><rect x="137" y="64" width="46" height="18" rx="4" fill-opacity=".85"/><rect x="232" y="64" width="46" height="18" rx="4" fill-opacity=".85"/></g><g fill="var(--a3)"><circle cx="65" cy="48" r="6"/><circle cx="160" cy="48" r="6"/><circle cx="255" cy="48" r="6"/></g></svg>'};
+var grid=document.getElementById("grid");
+CONCEPTS.forEach(function(c){
+ var a=document.createElement("a");a.className="card";a.href=encodeURI(c.file).replace(/,/g,"%2C");
+ a.innerHTML='<div class="art">'+(ART[c.art]||"")+'</div><div class="body"><h2></h2><p></p><div class="tags"></div><span class="open">Open →</span></div>';
+ a.querySelector("h2").textContent=c.title;a.querySelector("p").textContent=c.text;
+ c.tags.forEach(function(t){var s=document.createElement("span");s.textContent=t;a.querySelector(".tags").appendChild(s)});
+ grid.appendChild(a)});
+</script>
+</body>
+</html>
