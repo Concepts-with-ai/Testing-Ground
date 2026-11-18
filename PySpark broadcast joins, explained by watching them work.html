@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PySpark broadcast joins, explained by watching them work</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f3f5f7;--surface:#fff;--ink:#14212b;--mute:#5b6b78;--line:#d5dde3;--accent:#0b7a75;--bad:#c4452d;--good:#1f8a4c;--warn:#a86d00;--code:#eaf0f3;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:22px 16px 48px}
+h1{font-size:clamp(26px,4.6vw,42px);line-height:1.08;margin:0 0 10px;letter-spacing:-.02em}
+h2{margin:0 0 4px;font-size:24px;letter-spacing:-.01em}
+.lede{color:var(--mute);max-width:68ch;margin:0 0 16px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+button,select{font:inherit;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:8px 13px;border-radius:8px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700;padding:10px 20px}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.explain{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+.analogy{font-size:20px;line-height:1.35;margin:4px 0 8px;color:var(--accent);font-weight:700}
+.explain p{margin:0 0 6px}
+.controls,.params{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:12px 0}
+.params label,.controls label{font:500 13px "IBM Plex Mono",monospace;color:var(--mute)}
+.params input[type=range]{vertical-align:middle;width:170px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font:400 12px "IBM Plex Mono",monospace;color:var(--mute);margin-bottom:10px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+.board{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.ex{position:absolute;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.ex.drv{border-style:dashed}
+.eh{padding:3px 8px;font:500 12px "IBM Plex Mono",monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sl{position:absolute;left:8px;font:400 11px "IBM Plex Mono",monospace;color:var(--mute)}
+.chip{position:absolute;left:0;top:0;width:28px;height:20px;border-radius:5px;font:500 10px "IBM Plex Mono",monospace;color:#fff;display:flex;align-items:center;justify-content:center;transition:transform .6s ease,opacity .3s;z-index:2}
+.chip.sm{width:60px;height:22px;background:var(--surface);color:var(--ink);border:2px solid;border-radius:6px}
+.chip.joined{outline:2px solid var(--good);box-shadow:0 0 0 2px rgba(31,138,76,.35)}
+.chip.alert{outline:3px solid var(--bad);animation:pulse .6s ease 3}
+.chip.hide{opacity:0}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(196,69,45,.4)}}
+.gauge{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 16px 26px}
+.track{position:relative;height:28px;background:var(--line);border-radius:6px}
+.fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:6px;background:var(--good);transition:width 1.2s ease,background .3s}
+.mk{position:absolute;top:-6px;bottom:-6px;width:3px;background:var(--ink)}
+.mk span{position:absolute;top:36px;left:-40px;width:84px;text-align:center;font:400 11px "IBM Plex Mono",monospace;color:var(--mute)}
+.mk.mem{background:var(--bad)}
+.live{min-height:3.2em;margin:12px 0;padding:10px 14px;border-left:5px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h3{font-size:14px;margin:0 0 4px;color:var(--mute);font-weight:500}
+.big{font:500 26px "IBM Plex Mono",monospace;word-break:break-word}
+.sub{font-size:13px;color:var(--mute)}
+.ok{color:var(--good)}.no{color:var(--bad)}.wn{color:var(--warn)}
+pre{margin:12px 0 0;background:var(--code);border-radius:8px;padding:12px;font:400 13px/1.5 "IBM Plex Mono",monospace;overflow-x:auto;white-space:pre}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:18px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:500;white-space:nowrap}
+ul.tips{margin:14px 0 0;padding-left:20px}
+.cap{font-size:13px;color:var(--mute);margin-top:10px}
+.quiz{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.qtop{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;font:500 13px "IBM Plex Mono",monospace;color:var(--mute)}
+.qbar{height:6px;background:var(--line);border-radius:3px;margin-bottom:12px;overflow:hidden}
+.qbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s linear}
+.quiz h3{margin:0 0 6px;font-size:22px}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.fc{font:400 12px "IBM Plex Mono",monospace;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 8px}
+.fc b{color:var(--mute);font-weight:500}
+.opts{display:grid;gap:8px;margin-top:10px}
+.opt{text-align:left;padding:10px 14px;background:var(--bg)}
+.opt:disabled{opacity:1;cursor:default}
+.opt.best{border-color:var(--good);background:rgba(31,138,76,.16)}
+.opt.mid{border-color:var(--warn);background:rgba(168,109,0,.16)}
+.opt.bad{border-color:var(--bad);background:rgba(196,69,45,.12)}
+.opt.picked{outline:3px solid var(--ink)}
+.fbk{margin-top:14px;padding:12px 14px;border-radius:8px;background:var(--bg);border-left:5px solid var(--accent)}
+.fbk.best{border-left-color:var(--good)}.fbk.mid{border-left-color:var(--warn)}.fbk.bad{border-left-color:var(--bad)}
+.fbk h4{margin:0 0 4px;font-size:18px}.fbk p{margin:0 0 8px}
+.quiz ul{padding-left:20px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.chip,.fill{transition:none}.chip.alert{animation:none}}
+select#vsel{font:inherit;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:8px 10px;border-radius:8px;max-width:min(300px,100%)}
+</style>
+</head>
+<body>
+<main>
+<h1>PySpark broadcast joins, explained by watching them work</h1>
+<p class="lede">A join is easy on one computer. On a cluster, the rows you need to match sit on different machines. Spark has two main ways to deal with that. Pick a tab, press <b>Play</b>, watch the rows travel and listen to the sounds. Then test yourself with real-world scenarios in the last tab.</p>
+
+<div class="tabs" id="tabs" role="group" aria-label="Concept"></div>
+
+<section class="explain" aria-live="polite">
+  <h2 id="tName"></h2>
+  <p class="analogy" id="tAnalogy"></p>
+  <p id="tRule"></p>
+</section>
+
+<div class="controls">
+  <button class="go" id="bPlay">Play</button>
+  <button id="bReset">Reset</button>
+  <button id="bSound" aria-pressed="true">Sound: on</button>
+  <button id="bVoice" aria-pressed="true">Voice: on</button>
+  <select id="vsel" aria-label="Voice choice"></select>
+  <label id="scaleW"><input type="checkbox" id="scale"> Real-world scale: each orders chip = 1 million rows</label>
+</div>
+
+<div class="params" id="params" hidden>
+  <label for="size">Country table size: <span id="vSize">40</span> MB</label><input type="range" id="size" min="1" max="500" value="40">
+  <label for="thr">Auto-broadcast threshold</label>
+  <select id="thr"><option value="10">10 MB (default)</option><option value="50">50 MB</option><option value="100">100 MB</option></select>
+  <label><input type="checkbox" id="force"> Force it with broadcast()</label>
+</div>
+
+<div id="boardW">
+  <div class="legend">
+    <span><i style="background:#c9741a"></i>order from India</span><span><i style="background:#3b6fd4"></i>order from USA</span><span><i style="background:#2a8f55"></i>order from UK</span>
+    <span><i style="background:var(--surface);border:2px solid var(--accent)"></i>country lookup row (small table)</span>
+  </div>
+  <div class="board" id="board" aria-label="Animation: rows moving between Spark executors"></div>
+</div>
+<div class="gauge" id="gaugeW" hidden>
+  <div class="track" id="track"><i class="fill" id="fill"></i>
+    <b class="mk" id="mkT"><span id="mkTL">threshold</span></b><b class="mk mem" id="mkM"><span>memory room (illustrative)</span></b></div>
+</div>
+
+<div class="live" id="live" aria-live="polite">Press Play to start.</div>
+<section id="quiz" hidden>
+  <div class="quiz">
+    <div class="qtop"><span id="qprog"></span><span id="qscore"></span><span id="qtime"></span><label><input type="checkbox" id="pager"> Pager mode: 40 s per question</label></div>
+    <div class="qbar"><i id="qb"></i></div>
+    <div id="qbody" aria-live="polite"></div>
+  </div>
+</section>
+
+<div class="grid" id="cards">
+  <div class="card"><h3 id="h1"></h3><div class="big" id="v1">–</div><div class="sub" id="s1"></div></div>
+  <div class="card"><h3 id="h2"></h3><div class="big" id="v2">–</div><div class="sub" id="s2"></div></div>
+  <div class="card"><h3 id="h3"></h3><div class="big" id="v3">–</div><div class="sub" id="s3"></div></div>
+</div>
+<pre id="code"></pre>
+
+<div class="tw"><table>
+<tr><th>Join strategy</th><th>What moves?</th><th>Cost grows with…</th><th>Small table must fit in memory?</th><th>Best when</th></tr>
+<tr><td>Shuffle (sort-merge)</td><td>Rows of both tables</td><td>The big table</td><td>No</td><td>Both tables are large</td></tr>
+<tr><td>Broadcast hash</td><td>A copy of the small table to every executor</td><td>Small table size × number of executors</td><td>Yes</td><td>One table is small</td></tr>
+</table></div>
+<ul class="tips">
+<li>Check <code>df.explain()</code> for <b>BroadcastHashJoin</b> or <b>SortMergeJoin</b> to see which one Spark chose.</li>
+<li>Use the <code>broadcast()</code> hint only when you know the table is small and will stay small.</li>
+<li>In a left join, the lookup table on the right is the one you broadcast.</li>
+</ul>
+<p class="cap">Teaching model: 3 executors, 36 orders and 3 country rows, all made up. The plans are simplified, and the memory number in the last tab is illustrative. With Adaptive Query Execution on (the default in recent Spark versions), Spark can also switch to a broadcast join at runtime when a table turns out to be small. Check the docs for your Spark version. Voice uses your browser’s built-in speech, and sound starts after your first click.</p>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)},fmt=function(n){return n.toLocaleString("en-US")};
+var PAT="IN,US,IN,UK,IN,US,IN,IN,US,IN,UK,US".split(","),NAME={IN:"India",US:"USA",UK:"UK"},COL={IN:"#c9741a",US:"#3b6fd4",UK:"#2a8f55"},HX={IN:0,US:1,UK:2},SS={IN:1,US:2,UK:0},KEYS=["IN","US","UK"],NOTE=[262,330,392],MEM=200;
+var ORD=[];for(var q=0;q<36;q++)ORD.push({i:q,c:PAT[q%12]});
+var TABS=[
+{tab:"1. The problem",name:"The problem: a join across a cluster",a:"Matching name tags to guests who are spread across three rooms.",rule:"A join needs the matching rows to be in the same place. On a cluster, they usually aren’t.",
+ ct:["Orders already beside their country row","Orders that would have to move","Verdict"],code:"orders.join(countries, \"country_code\")   # add the country name to every order"},
+{tab:"2. Shuffle join",name:"Shuffle join: move everybody",a:"Everyone is told: go to the room for your country. A big crowd walks a long way.",rule:"Spark sends the rows of BOTH tables across the network so that matching keys land on the same executor. Reliable, but the big table has to move.",
+ ct:["Rows crossing the network","Busiest executor’s join work","Plan shows"],code:"spark.conf.set(\"spark.sql.autoBroadcastJoinThreshold\", -1)   # switch auto-broadcast off\norders.join(countries, \"country_code\").explain()\n# SortMergeJoin [country_code], [country_code]     (simplified plan)\n# :- Sort <- Exchange hashpartitioning(country_code, 200) <- Scan orders\n# +- Sort <- Exchange hashpartitioning(country_code, 200) <- Scan countries"},
+{tab:"3. Broadcast join",name:"Broadcast join: copy the small table",a:"Don’t move the crowd. Photocopy the guest list and hand a copy to every room.",rule:"Spark collects the small table on the driver and sends a copy to every executor. The big table never moves.",
+ ct:["Rows crossing the network","Busiest executor’s join work","Plan shows"],code:"from pyspark.sql.functions import broadcast\norders.join(broadcast(countries), \"country_code\").explain()\n# BroadcastHashJoin [country_code], [country_code], Inner, BuildRight   (simplified plan)\n# :- Scan orders\n# +- BroadcastExchange <- Scan countries"},
+{tab:"4. Too big to broadcast?",name:"When it doesn’t work: the copy must fit",a:"A photocopy only works if the list fits in every room’s drawer.",rule:"The small table must fit in memory on every executor, and on the driver. By default Spark only broadcasts on its own below 10 MB (spark.sql.autoBroadcastJoinThreshold).",
+ ct:["Country table size","Auto-broadcast threshold","Outcome"],code:""},
+{tab:"5. Challenge: make the call",name:"Challenge: make the call",a:"Real life doesn’t come with labels. You get a symptom and a decision.",rule:"For each scenario, choose what to do with the join. 10 points for the best call, 5 for acceptable but risky or incomplete, 0 for not recommended. Turn on Pager mode if you dare.",ct:["","",""],code:""}];
+var cur=0,runId=0,soundOn=true,voiceOn=true,AC=null,G={},chips=[],sm=[],ox=[],pos=[],st={},board=$("board");
+
+function tone(f,d,ty,g,t0){if(!AC||!soundOn)return;var o=AC.createOscillator(),a=AC.createGain(),t=AC.currentTime+(t0||0);o.type=ty||"triangle";o.frequency.value=f;a.gain.setValueAtTime(g||.06,t);a.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(a);a.connect(AC.destination);o.start(t);o.stop(t+d+.02)}
+function initAudio(){if(!soundOn)return;if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==="suspended")AC.resume()}
+function chime(){[523,659,784,1047].forEach(function(f,i){tone(f,.22,"triangle",.07,i*.1)})}
+function buzz(){tone(196,.4,"sawtooth",.05);tone(208,.4,"sawtooth",.05)}
+var VX={voice:null,list:[],auto:true};
+function vScore(v){var n=v.name,s=0;if(!/^en/i.test(v.lang))return -999;s+=10;if(/en[-_]US/i.test(v.lang))s+=3;
+ if(/natural|neural|online/i.test(n))s+=60;if(/premium|enhanced|siri/i.test(n))s+=40;
+ if(/aria|jenny|michelle|ava\b|emma|sonia|libby|clara|nancy|jane|sara|zira|samantha|allison|susan|karen|moira|serena|tessa|fiona|victoria|zoe|joanna|salli|kendra|kimberly|female|google us english/i.test(n))s+=25;
+ if(/david|mark|guy|daniel|alex\b|fred|ryan|george|james|thomas|oliver|\bmale\b|rishi|aaron|arthur|gordon|ralph|junior|albert|eddy|reed|rocko|sandy|shelley|grandma|grandpa|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|hysterical/i.test(n))s-=60;
+ if(/compact|espeak/i.test(n))s-=30;return s}
+function chooseVoice(){if(!window.speechSynthesis)return;var all=speechSynthesis.getVoices()||[];
+ VX.list=all.filter(function(v){return vScore(v)>-100}).sort(function(a,b){return vScore(b)-vScore(a)});if(VX.auto||!VX.voice)VX.voice=VX.list[0]||null;
+ var s=document.getElementById("vsel");if(s){s.innerHTML='<option value="">Auto: best available female voice</option>'+VX.list.map(function(v,i){return '<option value="'+i+'">'+v.name+' ('+v.lang+')</option>'}).join("")}}
+var PRON=[[/\bBCNF\b/g,"B C N F"],[/\b1NF\b/g,"first normal form"],[/\b2NF\b/g,"second normal form"],[/\b3NF\b/g,"third normal form"],[/\bNULLs\b/g,"nulls"],[/\bNULL\b/g,"null"],
+ [/\bTB\b/g,"terabytes"],[/\bGB\b/g,"gigabytes"],[/\bMB\b/g,"megabytes"],[/\bKB\b/g,"kilobytes"],[/\bPySpark\b/g,"Pie Spark"],[/\bSQL\b/g,"sequel"],[/\bUDF\b/g,"U D F"],[/\bIDs?\b/g,"I D"],
+ [/spark\.sql\.autoBroadcastJoinThreshold/g,"the auto broadcast threshold setting"],[/spark\.sql\.shuffle\.partitions/g,"the shuffle partitions setting"],
+ [/OutOfMemoryError/g,"out of memory error"],[/SortMergeJoin/g,"sort merge join"],[/BroadcastHashJoin/g,"broadcast hash join"],[/\bDb2\b/g,"D B two"],
+ [/\(\)/g,""],[/_/g," "],[/→/g," to "],[/×/g," times"],[/[✓✗]/g,""],[/\$(\d+)/g,"$1 dollars"]];
+function speakable(t){PRON.forEach(function(p){t=t.replace(p[0],p[1])});return t}
+function say(t){if(!voiceOn||!window.speechSynthesis||!t)return;
+ try{var parts=speakable(t).match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[t],out=[];
+  parts.forEach(function(p){p=p.trim();if(!p)return;if(out.length&&out[out.length-1].length<28)out[out.length-1]+=" "+p;else out.push(p)});
+  out.forEach(function(p){var u=new SpeechSynthesisUtterance(p);if(VX.voice){u.voice=VX.voice;u.lang=VX.voice.lang}else u.lang="en-US";
+   u.rate=VX.voice&&/natural|neural|online/i.test(VX.voice.name)?1:.95;u.pitch=1.05;speechSynthesis.speak(u)})}catch(e){}}
+function hush(){try{window.speechSynthesis&&speechSynthesis.cancel()}catch(e){}}
+if(window.speechSynthesis){chooseVoice();speechSynthesis.onvoiceschanged=chooseVoice;
+ var vs=document.getElementById("vsel");if(vs)vs.onchange=function(){VX.auto=this.value==="";VX.voice=VX.auto?VX.list[0]||null:VX.list[+this.value];hush();say("Hi, this is how I will sound while I explain the concept.")}}
+function dur(t){return Math.max(2600,voiceOn?t.split(" ").length*340:0)}
+function live(t){$("live").textContent=t}
+function at(id,fn,ms){setTimeout(function(){if(id===runId)fn()},ms)}
+function mv(e,p){e.style.transform="translate("+p.x+"px,"+p.y+"px)"}
+
+function layout(){
+ var W=board.clientWidth||700,s=W<640,gap=10,bw=s?W-2*gap:Math.floor((W-4*gap)/3),n=Math.max(2,Math.floor((bw-16)/32)),ro=Math.ceil(18/n),bh=26+ro*24+6+18+30,top=54;
+ G={W:W,n:n,ro:ro,boxes:[]};
+ for(var e=0;e<3;e++)G.boxes.push({x:s?gap:gap+e*(bw+gap),y:s?top+e*(bh+gap):top});
+ board.style.height=(s?top+3*(bh+gap):top+bh+gap)+"px";
+ Array.prototype.slice.call(board.querySelectorAll(".ex")).forEach(function(x){board.removeChild(x)});
+ var d=document.createElement("div");d.className="ex drv";d.style.cssText="left:"+gap+"px;top:4px;width:"+(W-2*gap)+"px;height:44px";d.innerHTML='<div class="eh">Driver (coordinates the job)</div>';board.appendChild(d);
+ for(e=0;e<3;e++){var b=G.boxes[e],x=document.createElement("div");x.className="ex";x.style.cssText="left:"+b.x+"px;top:"+b.y+"px;width:"+bw+"px;height:"+bh+"px";
+  x.innerHTML='<div class="eh"><b>Executor '+(e+1)+'</b> · <span class="cn"></span></div><div class="sl" style="top:'+(26+ro*24+8)+'px">countries (small table)</div>';board.appendChild(x)}}
+function slotO(e,j){var b=G.boxes[e];return {x:b.x+8+(j%G.n)*32,y:b.y+26+Math.floor(j/G.n)*24}}
+function slotS(e,k){var b=G.boxes[e];return {x:b.x+8+k*63,y:b.y+26+G.ro*24+26}}
+function drv(k){return {x:(G.W-189)/2+k*63,y:22}}
+function counts(){var c=[0,0,0],j=[0,0,0];ORD.forEach(function(o){c[ox[o.i]]++;if(chips[o.i].classList.contains("joined"))j[ox[o.i]]++});
+ Array.prototype.forEach.call(board.querySelectorAll(".cn"),function(e,i){e.textContent=c[i]+" orders · "+j[i]+" joined"})}
+function mkSmall(c,from){var e=document.createElement("div");e.className="chip sm";e.style.borderColor=COL[c];e.textContent=c+" "+NAME[c];board.appendChild(e);
+ if(from){e.style.transition="none";mv(e,from);e.offsetWidth;e.style.transition=""}return e}
+function reset(){
+ layout();chips.forEach(function(c){if(c.parentNode)board.removeChild(c)});chips=[];
+ Array.prototype.slice.call(board.querySelectorAll(".chip.sm")).forEach(function(c){board.removeChild(c)});sm=[];
+ ORD.forEach(function(o){var c=document.createElement("div");c.className="chip";c.style.background=COL[o.c];c.textContent=o.c;c.title="Order "+(o.i+1)+" from "+NAME[o.c];board.appendChild(c);chips.push(c);
+  ox[o.i]=o.i%3;pos[o.i]={e:o.i%3,j:Math.floor(o.i/3)};mv(c,slotO(pos[o.i].e,pos[o.i].j))});
+ KEYS.forEach(function(c){var e=mkSmall(c);mv(e,slotS(SS[c],0));sm.push(e)});
+ st={big:0,small:0,done:false};counts()}
+function place(dest){var cnt=[0,0,0],moved=[];ORD.forEach(function(o){var e=dest(o);if(e!==ox[o.i])moved.push(o.i);ox[o.i]=e;pos[o.i]={e:e,j:cnt[e]++}});return moved}
+
+function scl(){return $("scale").checked?1e6:1}
+function setC(i,v,cls,sub){var e=$("v"+i);e.textContent=v;e.className="big "+(cls||"");if(sub!=null)$("s"+i).textContent=sub}
+function netCard(){setC(1,fmt(st.big*scl()+st.small),"")}
+function showNums(){if(!st.done||(cur!==1&&cur!==2))return;netCard();setC(2,fmt(st.busy*scl()),"")}
+function joinPhase(id,t0,fin){var q=[[],[],[]],mx=0;ORD.forEach(function(o){q[ox[o.i]].push(o.i)});
+ q.forEach(function(a,e){mx=Math.max(mx,a.length);a.forEach(function(i,k){at(id,function(){chips[i].classList.add("joined");tone(NOTE[e]*2,.05,"sine",.03);counts()},t0+k*90)})});at(id,fin,t0+mx*90+500)}
+
+function play(){
+ hush();initAudio();runId++;var id=runId;$("bPlay").disabled=true;
+ if(cur===3)return play3(id);
+ reset();var T=TABS[cur];
+ if(cur===0){var tog=ORD.filter(function(o){return o.i%3===SS[o.c]}).length,e0=chips[0],s0=sm[0];
+  var t="A join matches rows by a key. Here we attach the country name to every order. But look: order one is from India, and its India row sits on a different executor. They have to meet before Spark can join them.";
+  live(t);say(t);e0.classList.add("alert");s0.classList.add("alert");buzz();
+  at(id,function(){setC(1,tog+" of 36","wn","Orders whose country row is on the same executor");setC(2,String(36-tog),"no","Rows that would have to travel");setC(3,"Something must move","wn","The question is what");
+   var f="Only "+tog+" of 36 orders already sit next to their country row. For the rest, something has to move. Next, see the two ways Spark can do it.";live(f);say(f);chime();$("bPlay").disabled=false},dur(t))}
+ else if(cur===1){var t1="Shuffle join. Spark tells every row, from both tables, to go to the executor that owns its country. Watch the orders walk across the network.";live(t1);say(t1);
+  var moved=place(function(o){return HX[o.c]});
+  ORD.forEach(function(o){if(moved.indexOf(o.i)<0)at(id,function(){mv(chips[o.i],slotO(pos[o.i].e,pos[o.i].j))},200)});
+  moved.forEach(function(i,k){at(id,function(){mv(chips[i],slotO(pos[i].e,pos[i].j));st.big++;tone(NOTE[pos[i].e],.09,"triangle",.06);netCard();counts()},400+k*70)});
+  var ts=400+moved.length*70;
+  KEYS.forEach(function(c,s){at(id,function(){mv(sm[s],slotS(HX[c],0));st.small++;tone(NOTE[HX[c]],.15,"square",.04);netCard()},ts+s*150)});
+  var loads=[0,0,0];ORD.forEach(function(o){loads[HX[o.c]]++});
+  joinPhase(id,ts+900,function(){st.done=true;st.busy=Math.max.apply(null,loads);showNums();setC(3,"SortMergeJoin","","Spark shuffled both tables");$("s2").textContent="India’s executor does the most: "+loads.join(" / ")+" orders";
+   var f="Done. "+moved.length+" order rows and 3 country rows crossed the network. Everything lined up, but the big table had to move, and the India executor ended up with the most work.";live(f);say(f);chime();$("bPlay").disabled=false})}
+ else{var t2="Broadcast join. The driver collects the small table, then hands a copy to every executor. The big table never moves.";live(t2);say(t2);
+  KEYS.forEach(function(c,s){at(id,function(){mv(sm[s],drv(s));st.small++;tone(220,.18,"triangle",.07);netCard()},400+s*300)});
+  var t1b=400+3*300+800;
+  [0,1,2].forEach(function(e){KEYS.forEach(function(c,s){at(id,function(){var el=mkSmall(c,drv(s));mv(el,slotS(e,s));st.small++;tone(NOTE[s]*2,.14,"triangle",.05);netCard()},t1b+e*420+s*90)})});
+  at(id,function(){sm.forEach(function(e){e.classList.add("hide")})},t1b+1700);
+  joinPhase(id,t1b+2000,function(){st.done=true;st.busy=12;showNums();setC(3,"BroadcastHashJoin","","Spark broadcast the small table");$("s2").textContent="Every executor joins 12 orders: perfectly even";
+   var f="Done. Only 3 small rows were collected and copied to each executor. Not a single order moved, and the work is spread evenly.";live(f);say(f);chime();$("bPlay").disabled=false})}}
+
+function gauge(){var s=+$("size").value,t=+$("thr").value;$("vSize").textContent=s;$("mkT").style.left=(t/500*100)+"%";$("mkM").style.left=(MEM/500*100)+"%";$("mkTL").textContent="threshold "+t+" MB";
+ setC(1,s+" MB","");setC(2,t+" MB","");$("s1").textContent="Slide to change";$("s2").textContent="spark.sql.autoBroadcastJoinThreshold"}
+function codeFor(){if(cur!==3)return TABS[cur].code;var t=$("thr").value;
+ return "spark.conf.set(\"spark.sql.autoBroadcastJoinThreshold\", "+t+" * 1024 * 1024)   # "+t+" MB\n\norders.join(countries, \"country_code\")              # Spark decides\n"+($("force").checked?"orders.join(broadcast(countries), \"country_code\")   # you force it  <-- active\n":"# orders.join(broadcast(countries), \"country_code\")   # you force it (hint)\n")+"# SQL: SELECT /*+ BROADCAST(c) */ ... FROM orders o JOIN countries c ON ..."}
+function play3(id){var s=+$("size").value,t=+$("thr").value,f=$("force").checked,fl=$("fill");
+ fl.style.transition="none";fl.style.width="0";fl.offsetWidth;fl.style.transition="";fl.style.background=s<=t?"var(--good)":s<=MEM?"var(--warn)":"var(--bad)";fl.style.width=(s/500*100)+"%";
+ for(var i=0;i<8;i++)tone(300+i*60,.08,"triangle",.04,i*.14);
+ var msg,plan,cls,ok=true;
+ if(s<=t){msg="The table is "+s+" MB, under the "+t+" MB threshold, so Spark broadcasts it automatically.";plan="BroadcastHashJoin";cls="ok"}
+ else if(!f){msg="The table is "+s+" MB, over the "+t+" MB threshold, so Spark does not broadcast it. It falls back to a shuffle join. It still works, just with more network traffic.";plan="SortMergeJoin";cls="wn"}
+ else if(s<=MEM){msg="You forced the broadcast with broadcast(). It works here because "+s+" MB still fits in memory. Be careful: if the table grows, this join will break.";plan="BroadcastHashJoin (forced)";cls="wn"}
+ else{msg="You forced the broadcast, but "+s+" MB does not fit in memory on every executor. The job fails with an out of memory error.";plan="OutOfMemoryError";cls="no";ok=false}
+ live("Checking the size…");at(id,function(){setC(3,plan,cls);$("s3").textContent="";live(msg);say(msg);ok?chime():buzz();$("bPlay").disabled=false},1400)}
+
+function show(i){runId++;hush();cur=i;var T=TABS[i];$("bPlay").disabled=false;$("bPlay").textContent=i===3?"Run it":"Play";
+ $("tName").textContent=T.name;$("tAnalogy").textContent=T.a;$("tRule").textContent=T.rule;
+ [1,2,3].forEach(function(k){$("h"+k).textContent=T.ct[k-1];setC(k,"–","","");$("s"+k).textContent=""});
+ Array.prototype.forEach.call($("tabs").children,function(b,k){b.setAttribute("aria-pressed",k===i)});
+ var g=i===3,ch=i===4;clearQ();$("boardW").hidden=g||ch;$("gaugeW").hidden=!g;$("params").hidden=!g;$("scaleW").hidden=g||ch;$("cards").hidden=ch;$("code").hidden=ch;$("live").hidden=ch;$("quiz").hidden=!ch;$("bPlay").hidden=ch;
+ if(ch){startQuiz()}else if(g){$("fill").style.width="0";gauge();live("Slide the size, choose a threshold, then press Run it.")}
+ else{reset();live("Press Play to start.");if(i===1||i===2){$("s1").textContent="Orders moved + country rows copied";$("s2").textContent="Rows the busiest executor joins";$("s3").textContent="What df.explain() would show"}}
+ $("code").textContent=codeFor()}
+
+var QS=[
+{t:"The country lookup",f:[["orders","2 TB"],["country_codes","50 KB"],["join","INNER on country_code"],["threshold","10 MB (default)"]],
+ sit:"Every night you add country names to 2 TB of order events. The lookup is a 50 KB Parquet file, and the cluster runs default settings.",q:"What is the best move?",
+ o:[{t:"Broadcast the lookup. Spark usually does it alone, and a hint makes your intent explicit.",p:10,fb:"50 KB is far below the 10 MB threshold. The lookup is copied to each executor once, and the 2 TB never shuffles."},
+ {t:"Repartition both tables by country_code first.",p:0,fb:"That is a shuffle on purpose. You would move 2 TB to avoid moving 50 KB."},
+ {t:"Raise spark.sql.shuffle.partitions to 2000.",p:0,fb:"You would be tuning a shuffle you don’t need. The cheapest shuffle is the one that never happens."},
+ {t:"Collect the lookup into a Python dict and map values with a UDF.",p:5,fb:"It works, and it is a hand-made broadcast. But a Python UDF is usually slower than a built-in join, and Spark can’t optimize it."}],
+ why:"A tiny lookup against a huge fact table is the textbook broadcast case.",code:'orders.join(broadcast(country_codes), "country_code")'},
+{t:"Two giants",f:[["orders","3 TB"],["clickstream","5 TB"],["join","INNER on user_id"],["executor memory","32 GB"]],
+ sit:"You must join 3 TB of orders with 5 TB of clickstream events on user_id. A teammate suggests broadcasting the smaller one.",q:"What do you do?",
+ o:[{t:"Broadcast orders and give the driver more memory.",p:0,fb:"3 TB can’t be copied to every 32 GB executor. Spark also refuses to broadcast tables beyond roughly 8 GB."},
+ {t:"Use a normal shuffle (sort-merge) join and tune partitions, or let Adaptive Query Execution help.",p:10,fb:"When both sides are huge, moving data across the network is the price of the join. Your job is to make that shuffle efficient."},
+ {t:"Raise spark.sql.autoBroadcastJoinThreshold to 4 TB.",p:0,fb:"The setting only tells Spark what it may try. The memory still doesn’t exist."},
+ {t:"Bucket both tables by user_id when you write them.",p:5,fb:"A real technique that can remove the shuffle for repeated joins. For a one-off job it is a big upfront investment."}],
+ why:"Broadcast is for one small side. With two large tables, shuffle join is the right tool.",code:'orders.join(clicks, "user_id")   # SortMergeJoin, no broadcast'},
+{t:"The preserved side",f:[["campaigns","5 MB"],["events","4 TB"],["join","LEFT: keep every campaign"],["hint","broadcast(campaigns)"]],
+ sit:"You need every campaign, even those with no events, plus event counts from 4 TB of events. You added broadcast(campaigns), but explain() still shows SortMergeJoin.",q:"Why, and what do you do?",
+ o:[{t:"Spark can’t broadcast the side a left join must preserve. Aggregate events per campaign first, then broadcast that small result.",p:10,fb:"A broadcast hash join builds its table from the side that does not have to keep all its rows. Shrinking the big side first makes it broadcastable."},
+ {t:"Add executor memory so the hint is respected.",p:0,fb:"Memory is not the problem. The join type rules out broadcasting that side."},
+ {t:"Use the SQL BROADCAST hint instead, because SQL hints are stronger.",p:0,fb:"Hints are requests, not orders. Spark ignores one it can’t apply."},
+ {t:"Switch to a RIGHT JOIN and broadcast campaigns.",p:0,fb:"Same problem mirrored: campaigns would still be the preserved side."}],
+ why:"For a left join, the right side is the one you can broadcast. If it is big, aggregate or filter it down first.",code:'events_agg = events.groupBy("campaign_id").count()\ncampaigns.join(broadcast(events_agg), "campaign_id", "left")'},
+{t:"The stuck task",f:[["orders","800 GB"],["customers","300 MB"],["skew","30% of orders are customer GUEST"],["executor memory","16 GB"]],
+ sit:"A shuffle join on customer_id finishes 199 of 200 tasks in minutes, then one task grinds for two hours. It is the one holding all the GUEST rows.",q:"What fixes it most simply?",
+ o:[{t:"Broadcast customers. No shuffle means no hot partition.",p:10,fb:"300 MB fits easily on 16 GB executors. Without a shuffle, each executor joins the rows it already holds."},
+ {t:"Raise spark.sql.shuffle.partitions to 2000.",p:0,fb:"More partitions don’t split one key. All GUEST rows still hash to the same partition."},
+ {t:"Salt the join key with a random suffix.",p:5,fb:"A real technique for two large tables, but needlessly complex when one side is small enough to broadcast."},
+ {t:"Add more executors.",p:0,fb:"One task is slow, so the extra executors would sit idle."}],
+ why:"Skew comes from hashing the big table by key during a shuffle. Broadcast avoids that shuffle. If both sides were large, you’d use salting or Adaptive Query Execution’s skew handling.",code:'orders.join(broadcast(customers), "customer_id")'},
+{t:"Worked for a year, now it crashes",f:[["dim_products","80 MB, now 3 GB"],["hint","broadcast(dim_products)"],["error","driver OutOfMemoryError"]],
+ sit:"A pipeline has used broadcast(dim_products) for a year. Last night a catalog import grew the table from 80 MB to 3 GB, and the job died with an out of memory error on the driver.",q:"What is the best fix?",
+ o:[{t:"Remove the hard-coded hint so Spark decides, and prune the table to the rows and columns you need.",p:10,fb:"A hint is a promise that the table stays small. Data grows and the promise breaks. Pruning may keep it broadcastable anyway."},
+ {t:"Double the driver memory and keep the hint.",p:5,fb:"May rescue tonight’s run, but you still copy 3 GB to every executor, and the table will keep growing."},
+ {t:"Add automatic retries.",p:0,fb:"An out of memory failure repeats every time."},
+ {t:"Cache dim_products.",p:0,fb:"Caching doesn’t shrink the table. It is still collected on the driver and copied everywhere."}],
+ why:"Prefer letting Spark decide using the threshold. Use hints only for tables you know will stay small.",code:'slim = dim_products.select("product_id", "category").where("active")\norders.join(slim, "product_id")   # let Spark decide, no hard-coded hint'},
+{t:"Spark won’t broadcast",f:[["events","10 TB"],["active_users","about 40 MB after the filter"],["users source","50 GB"],["plan","SortMergeJoin"]],
+ sit:"active_users is a view: SELECT * FROM users WHERE active = 1. The result is about 40 MB, yet explain() shows a shuffle join.",q:"Why, and what do you do?",
+ o:[{t:"Add broadcast(active_users). Spark estimated from the 50 GB source and can’t see how much the filter removes.",p:10,fb:"Spark’s size estimate was too cautious. The hint tells it what you know."},
+ {t:"Raise the auto-broadcast threshold to 100 GB.",p:0,fb:"Spark would then try to broadcast any table up to 100 GB, including ones that won’t fit."},
+ {t:"Increase executor memory.",p:0,fb:"Memory isn’t what stops it. Spark’s size estimate is."},
+ {t:"Repartition events by user_id first.",p:0,fb:"That adds a shuffle of 10 TB for no gain."}],
+ why:"Auto-broadcast depends on Spark’s size estimate. When you know the real size, say so. With Adaptive Query Execution on, Spark may also switch at runtime once the filter has run.",code:'events.join(broadcast(active_users), "user_id")'},
+{t:"The star schema",f:[["fact","1 TB"],["country","50 KB"],["store","5 MB"],["product","300 MB"],["customer","40 GB"],["executor memory","16 GB"]],
+ sit:"A 1 TB fact table joins four dimension tables. Each join is a decision.",q:"Which dimensions do you broadcast?",
+ o:[{t:"Broadcast country, store and product. Shuffle only for customer.",p:10,fb:"Judge each dimension on its own. 300 MB is comfortable on 16 GB executors, and 40 GB is not."},
+ {t:"Broadcast all four.",p:0,fb:"40 GB can’t be copied to every 16 GB executor."},
+ {t:"Broadcast only country.",p:5,fb:"Safe, but store and product are easy wins. Each broadcast removes a shuffle of the 1 TB fact table."},
+ {t:"Shuffle all four to be safe.",p:0,fb:"Three shuffles of the fact table you didn’t need."}],
+ why:"Chain the broadcasts so the fact table only shuffles for the join that truly needs it.",code:'(fact.join(broadcast(country), "country_id")\n     .join(broadcast(store), "store_id")\n     .join(broadcast(product), "product_id")\n     .join(customer, "customer_id"))'},
+{t:"The gray zone",f:[["products","2 GB"],["fact","5 TB"],["executor memory","8 GB"],["threshold","10 MB (default)"]],
+ sit:"The products dimension is 2 GB, too big for auto-broadcast, but far smaller than the fact table. Most of its columns are never used by this job.",q:"What is your first move?",
+ o:[{t:"Select only the needed columns, filter rows, then broadcast if it shrinks to a few hundred MB.",p:10,fb:"Cut first, then decide. A table is often much bigger in memory than on disk, so leave plenty of room."},
+ {t:"Force broadcast(products) as it is.",p:0,fb:"2 GB copied to every 8 GB executor risks memory pressure, the driver must collect it first, and it breaks as the table grows."},
+ {t:"Set the threshold to 3 GB for the whole cluster.",p:0,fb:"The setting would apply to every join in every job."},
+ {t:"Use a shuffle join and move on.",p:5,fb:"Safe, but you skipped a cheap chance to avoid shuffling 5 TB."}],
+ why:"Between tiny and huge lies a gray zone. Shrink the table first.",code:'slim = (products.select("product_id", "category")\n        .where("active"))\n# check how big slim is, then:\norders.join(broadcast(slim), "product_id")   # only if it is now small'}];
+var qz={order:[],i:0,score:0,res:[],opts:[],ans:false,timer:null,left:40};
+function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),x=a[i];a[i]=a[j];a[j]=x}return a}
+function clearQ(){if(qz.timer){clearInterval(qz.timer);qz.timer=null}}
+function startQuiz(){qz.order=shuf(QS.map(function(_,i){return i}));qz.i=0;qz.score=0;qz.res=[];renderQ()}
+function startT(){qz.left=40;$("qtime").textContent="⏱ "+qz.left+"s";clearQ();qz.timer=setInterval(function(){qz.left--;$("qtime").textContent="⏱ "+qz.left+"s";if(qz.left<=5&&qz.left>0)tone(880,.06,"sine",.04);if(qz.left<=0){clearQ();ans(-1)}},1000)}
+function renderQ(){clearQ();var n=QS.length;if(qz.i>=n)return fin();var q=QS[qz.order[qz.i]];qz.opts=shuf(q.o);qz.ans=false;
+ $("qprog").textContent="Scenario "+(qz.i+1)+" of "+n;$("qscore").textContent="Score: "+qz.score+" / "+n*10;$("qtime").textContent="";$("qb").style.width=(qz.i/n*100)+"%";
+ $("qbody").innerHTML='<h3>'+q.t+'</h3><div class="facts">'+q.f.map(function(x){return '<span class="fc"><b>'+x[0]+'</b> '+x[1]+'</span>'}).join("")+'</div><p>'+q.sit+'</p><p><b>'+q.q+'</b></p><div class="opts">'+qz.opts.map(function(o,k){return '<button class="opt" data-k="'+k+'">'+o.t+'</button>'}).join("")+'</div><div class="fbk" id="fbk" hidden></div>';
+ hush();say(q.sit+" "+q.q);if($("pager").checked)startT()}
+function ans(k){if(qz.ans)return;qz.ans=true;clearQ();var q=QS[qz.order[qz.i]],o=k>=0?qz.opts[k]:null,p=o?o.p:0;qz.score+=p;qz.res.push({t:q.t,p:p});
+ $("qscore").textContent="Score: "+qz.score+" / "+QS.length*10;
+ Array.prototype.forEach.call($("qbody").querySelectorAll(".opt"),function(b,j){var oo=qz.opts[j];b.disabled=true;b.classList.add(oo.p===10?"best":oo.p===5?"mid":"bad");if(j===k)b.classList.add("picked")});
+ var cls=p===10?"best":p===5?"mid":"bad",head=!o?"Time’s up. In production the pager doesn’t wait.":p===10?"Best call. +10":p===5?"Acceptable, but not the best call. +5":"Not recommended. +0",f=$("fbk");
+ f.className="fbk "+cls;f.hidden=false;f.innerHTML='<h4>'+head+'</h4><p>'+(o?o.fb:"")+'</p><p><b>The expert move:</b> '+q.why+'</p><pre id="fcode"></pre><button class="go" id="qnext">'+(qz.i+1>=QS.length?"See my result":"Next scenario")+'</button>';
+ $("fcode").textContent=q.code;
+ if(p===10)chime();else if(p===5){tone(440,.15,"triangle",.06);tone(523,.2,"triangle",.06,.15)}else buzz();
+ hush();say(head+" "+(o?o.fb:"")+" "+q.why)}
+function fin(){var n=QS.length,max=n*10,s=qz.score,r=s>=max*.85?"Broadcast Boss":s>=max*.55?"Solid engineer":"Keep practicing",
+ m=s>=max*.85?"You weigh size, join type and growth before reaching for a hint.":s>=max*.55?"Good instincts. Review the scenarios marked with a cross or a tilde, then try again.":"Revisit tabs 2 to 4, then try again.";
+ $("qb").style.width="100%";$("qprog").textContent="Finished";$("qscore").textContent="Score: "+s+" / "+max;$("qtime").textContent="";
+ $("qbody").innerHTML='<h3>'+r+': '+s+' / '+max+'</h3><p>'+m+'</p><ul>'+qz.res.map(function(x){return '<li>'+(x.p===10?"✓":x.p===5?"~":"✗")+" "+x.t+" ("+x.p+")</li>"}).join("")+'</ul><button class="go" id="qretry">Try again with a new order</button>';
+ if(s>=max*.55)chime();else buzz();hush();say(r+". You scored "+s+" out of "+max+". "+m)}
+$("qbody").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;
+ if(b.classList.contains("opt"))ans(+b.getAttribute("data-k"));else if(b.id==="qnext"){qz.i++;renderQ()}else if(b.id==="qretry")startQuiz()});
+$("pager").onchange=function(){if(cur===4&&!qz.ans&&qz.i<QS.length){clearQ();$("qtime").textContent="";if(this.checked)startT()}};
+TABS.forEach(function(t,i){var b=document.createElement("button");b.textContent=t.tab;b.onclick=function(){show(i)};$("tabs").appendChild(b)});
+
+$("bPlay").onclick=play;$("bReset").onclick=function(){show(cur)};
+$("bSound").onclick=function(){soundOn=!soundOn;this.setAttribute("aria-pressed",soundOn);this.textContent="Sound: "+(soundOn?"on":"off")};
+$("bVoice").onclick=function(){voiceOn=!voiceOn;this.setAttribute("aria-pressed",voiceOn);this.textContent="Voice: "+(voiceOn?"on":"off");if(!voiceOn)hush()};
+$("scale").onchange=showNums;
+["size","thr","force"].forEach(function(k){$(k).oninput=function(){runId++;$("bPlay").disabled=false;$("fill").style.width="0";gauge();setC(3,"–","","");$("code").textContent=codeFor();live("Press Run it to see what Spark does.")}});
+var rt;window.addEventListener("resize",function(){clearTimeout(rt);rt=setTimeout(function(){if(cur<3&&$("bPlay").disabled===false)reset()},150)});
+show(0);
+})();
+</script>
+</body>
+</html>
