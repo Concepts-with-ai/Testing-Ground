@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Database normalization, explained by watching it work</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f3f5f7;--surface:#fff;--ink:#14212b;--mute:#5b6b78;--line:#d5dde3;--accent:#0b7a75;--bad:#c4452d;--good:#1f8a4c;--cell:#e3eaef;--key:#f3dfa0;--badbg:#f4b9ad;--gold:#ffd25a;--stale:#ff9b82;--head:#37444e;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--bad:#ff7a5c;--good:#55d68a;--cell:#243645;--key:#5d4d14;--badbg:#7a2c1d;--gold:#8a6a00;--stale:#a24a35;--head:#0b141a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--bad:#ff7a5c;--good:#55d68a;--cell:#243645;--key:#5d4d14;--badbg:#7a2c1d;--gold:#8a6a00;--stale:#a24a35;--head:#0b141a;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:22px 16px 48px}
+h1{font-size:clamp(26px,4.6vw,42px);line-height:1.08;margin:0 0 10px;letter-spacing:-.02em}
+h2{margin:0 0 4px;font-size:24px;letter-spacing:-.01em}
+.lede{color:var(--mute);max-width:68ch;margin:0 0 10px}
+.mnem{font-weight:700;color:var(--accent);margin:0 0 16px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+button{font:inherit;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:8px 13px;border-radius:8px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700;padding:10px 20px}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.explain{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+.analogy{font-size:20px;line-height:1.35;margin:4px 0 8px;color:var(--accent);font-weight:700}
+.explain p{margin:0 0 6px}
+.rule{font-weight:500}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}
+.sep{width:1px;height:28px;background:var(--line)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font:400 12px "IBM Plex Mono",monospace;color:var(--mute);margin-bottom:12px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+#tables{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;min-height:120px}
+.tcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;max-width:100%}
+.tcard.enter{animation:pop .5s ease both}
+@keyframes pop{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+.tt{font:500 13px "IBM Plex Mono",monospace;color:var(--mute);margin-bottom:4px}
+.tscroll{overflow-x:auto}
+table.d{border-collapse:separate;border-spacing:3px;font:400 13px "IBM Plex Mono",monospace}
+.d th{background:var(--head);color:#fff;font-weight:500;padding:5px 9px;border-radius:5px;white-space:nowrap;text-align:left}
+.d th.k{box-shadow:inset 0 -3px 0 #e0b020}
+.d td{background:var(--cell);padding:5px 9px;border-radius:5px;white-space:nowrap}
+.d td.k{background:var(--key)}
+.d td.b{background:var(--badbg);animation:pulse 1s ease 2}
+.d td.g{background:var(--gold);outline:2px solid #a86d00}
+.d td.s{background:var(--stale);outline:2px solid var(--bad)}
+.d td.n{background:var(--badbg);font-style:italic;outline:2px dashed var(--bad)}
+.d tr.gone td{opacity:.25;text-decoration:line-through;transition:opacity .4s}
+@keyframes pulse{50%{box-shadow:0 0 0 4px rgba(196,69,45,.45)}}
+.live{min-height:3.2em;margin:12px 0;padding:10px 14px;border-left:5px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h3{font-size:14px;margin:0 0 4px;color:var(--mute);font-weight:500}
+.big{font:500 28px "IBM Plex Mono",monospace}
+.ok{color:var(--good)}.no{color:var(--bad)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:18px}
+table.c{width:100%;border-collapse:collapse;font-size:14px}
+.c th,.c td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.c th{color:var(--mute);font-weight:500;white-space:nowrap}
+.cap{font-size:13px;color:var(--mute);margin-top:6px}
+@media (prefers-reduced-motion:reduce){.tcard.enter,.d td.b{animation:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Database normalization, explained by watching it work</h1>
+<p class="lede">Normalization means storing every fact in exactly one place. Pick a normal form, press <b>Watch it happen</b>, and see the table break apart. Then run the three tests to feel what goes wrong when facts are stored twice. Listen: every step has a sound and a voice.</p>
+<p class="mnem">“The key (1NF), the whole key (2NF), and nothing but the key (3NF), so help me Codd (BCNF).”</p>
+
+<div class="tabs" id="tabs" role="group" aria-label="Normal form"></div>
+
+<section class="explain" aria-live="polite">
+  <h2 id="tName"></h2>
+  <p class="analogy" id="tAnalogy"></p>
+  <p class="rule" id="tRule"></p>
+</section>
+
+<div class="controls">
+  <button class="go" id="bWatch">Watch it happen</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button id="bU"></button><button id="bI"></button><button id="bD"></button>
+  <button id="bReset">Reset</button>
+  <button id="bSound" aria-pressed="true">Sound: on</button>
+  <button id="bVoice" aria-pressed="true">Voice: on</button>
+</div>
+
+<div class="legend">
+  <span><i style="background:var(--key)"></i>key column</span><span><i style="background:var(--badbg)"></i>problem: a fact stored again</span>
+  <span><i style="background:var(--gold)"></i>cell to edit</span><span><i style="background:var(--stale)"></i>copy that was forgotten</span>
+</div>
+<div id="tables"></div>
+<div class="live" id="live" aria-live="polite">Press “Watch it happen”, or run a test.</div>
+
+<div class="grid">
+  <div class="card"><h3>Update test: places to edit</h3><div class="big" id="rU">–</div></div>
+  <div class="card"><h3>Insert test: no made-up data?</h3><div class="big" id="rI">–</div></div>
+  <div class="card"><h3>Delete test: no fact lost?</h3><div class="big" id="rD">–</div></div>
+</div>
+
+<div class="tw"><table class="c">
+<tr><th>Form</th><th>Rule in plain words</th><th>Ask yourself</th><th>Removes</th></tr>
+<tr><td>1NF</td><td>One value per cell. Rows can be identified.</td><td>Is anything packed into a single cell?</td><td>Repeating and multi-valued data</td></tr>
+<tr><td>2NF</td><td>Every column depends on the whole key.</td><td>Does a column need only part of the key?</td><td>Partial dependencies</td></tr>
+<tr><td>3NF</td><td>Columns depend on the key, not on each other.</td><td>Does one non-key column decide another?</td><td>Transitive dependencies</td></tr>
+<tr><td>BCNF</td><td>Only a key may decide anything.</td><td>Is every “this decides that” rule decided by a key?</td><td>Leftover anomalies when keys overlap</td></tr>
+</table></div>
+<p class="cap">The data is a small made-up example for learning. Voice uses your browser’s built-in speech, and sound starts after your first click.</p>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+function TB(title,cols,rows,bad){return {title:title,cols:cols.map(function(c){var k=c.slice(-1)==="*";return {n:k?c.slice(0,-1):c,k:k}}),
+ rows:rows.map(function(r,ri){return r.map(function(v,ci){return {v:v,b:!!(bad&&bad.some(function(x){return x[0]===ri&&x[1]===ci}))}})})}}
+var PROD=function(){return TB("products",["product*","price"],[["Pen","$2"],["Book","$10"],["Lamp","$30"]])};
+var ITEMS=function(){return TB("order_items",["order_id*","product*","qty"],[["1","Pen","2"],["1","Book","1"],["2","Pen","1"],["3","Lamp","1"]])};
+var ST=[
+{sc:"A",tab:"Unnormalized",name:"Before: one messy table",a:"A shopping list where one line says “milk, eggs, bread”.",rule:"The problem: the items cell packs product, price and quantity together, so you can’t search or count a single item.",
+ why:"Look at the red cells. Each items cell crams several facts into one value.",fix:"",left:"Let’s fix that. Click 1NF to give every product its own row.",
+ build:function(){return [TB("orders_raw",["order_id*","customer","city","zip","items"],[["1","Ana","Dallas","75001","Pen $2 x2; Book $10 x1"],["2","Ben","Austin","73301","Pen $2 x1"],["3","Ana","Dallas","75001","Lamp $30 x1"]],[[0,4],[1,4],[2,4]])]}},
+{sc:"A",tab:"1NF",name:"First normal form (1NF)",a:"One item per box, and every row has a name tag.",rule:"Rule: every cell holds one single value, and every row can be identified by a key.",
+ why:"The items cell holds several values, so it breaks the first rule.",fix:"Fixed. Every product now has its own row, and order and product together identify each row.",left:"But look at the red cells. Ana’s details are repeated on every line, and Pen’s price is stored twice.",
+ build:function(){return [TB("orders",["order_id*","customer","city","zip","product*","price","qty"],[["1","Ana","Dallas","75001","Pen","$2","2"],["1","Ana","Dallas","75001","Book","$10","1"],["2","Ben","Austin","73301","Pen","$2","1"],["3","Ana","Dallas","75001","Lamp","$30","1"]],[[1,1],[1,2],[1,3],[2,5],[3,2]])]}},
+{sc:"A",tab:"2NF",name:"Second normal form (2NF)",a:"Don’t write the price on every order slip. Keep one price list.",rule:"Rule: 1NF, and every column must depend on the WHOLE key, not just a part of it.",
+ why:"The key is order plus product. But the customer depends only on the order, and the price depends only on the product. These are partial dependencies.",fix:"We moved each fact to the table whose key decides it: orders, products and order items.",left:"Better. One flaw remains: Dallas is still repeated for every order from that zip code.",
+ build:function(){return [TB("orders",["order_id*","customer","city","zip"],[["1","Ana","Dallas","75001"],["2","Ben","Austin","73301"],["3","Ana","Dallas","75001"]],[[2,2]]),PROD(),ITEMS()]}},
+{sc:"A",tab:"3NF",name:"Third normal form (3NF)",a:"Don’t write the city beside every ZIP. Look it up in the ZIP book.",rule:"Rule: 2NF, and columns depend on the key, not on other non-key columns.",
+ why:"The city is decided by the zip code, not by the order. A non-key column deciding another is a transitive dependency.",fix:"The zip to city link now has its own table, so each city is stored once.",left:"Every fact now lives in exactly one place. For most databases, you can stop here. But one sneaky case remains. Click 3NF but not BCNF.",
+ build:function(){return [TB("orders",["order_id*","customer","zip"],[["1","Ana","75001"],["2","Ben","73301"],["3","Ana","75001"]]),TB("zips",["zip*","city"],[["75001","Dallas"],["73301","Austin"]]),PROD(),ITEMS()]}},
+{sc:"B",tab:"3NF but not BCNF",name:"A trickier case: passes 3NF, fails BCNF",a:"The rule is being enforced by someone who isn’t in charge.",rule:"Each instructor teaches exactly one course, so instructor decides course. But instructor alone is not a key.",
+ why:"All three columns belong to some key, so 3NF has no complaint. Yet Rao’s course is stored twice, and Kim’s too.",fix:"",left:"BCNF is stricter and has no exceptions. Click BCNF to see the split.",
+ build:function(){return [TB("tutoring",["student*","course*","instructor*"],[["Ana","Databases","Rao"],["Ben","Databases","Rao"],["Ben","Statistics","Kim"],["Cy","Databases","Lee"],["Cy","Statistics","Kim"]],[[1,1],[4,1]])]}},
+{sc:"B",tab:"BCNF",name:"Boyce-Codd normal form (BCNF)",a:"Only a key may decide anything.",rule:"Rule: for every “this decides that” rule, the thing on the left must be a key.",
+ why:"Instructor decides course, but instructor is not a key. A non-key is making the rules.",fix:"The rule instructor decides course now has its own table, where instructor is the key.",left:"Every rule is now decided by a key. The price: checking that a student has one instructor per course now needs a join across two tables.",
+ build:function(){return [TB("enrollments",["student*","instructor*"],[["Ana","Rao"],["Ben","Rao"],["Ben","Kim"],["Cy","Lee"],["Cy","Kim"]]),TB("instructors",["instructor*","course"],[["Rao","Databases"],["Lee","Databases"],["Kim","Statistics"]])]}}];
+var SC={
+A:{ub:"Update: change Ana’s city",ib:"Insert: add a new product (Mug)",db:"Delete: remove order 3",
+ u:{col:"city",val:"Dallas",nv:"Plano"},i:{map:{product:"Mug",price:"$5",items:"Mug $5"},need:"an order",lbl:"the Mug"},
+ d:{match:{order_id:"3"},probe:"Lamp",fact:"a Lamp costs $30",keep:"Lamp and its price are still in the product list"}},
+B:{ub:"Update: Rao switches course",ib:"Insert: new instructor (Park)",db:"Delete: Cy drops Lee’s class",
+ u:{col:"course",val:"Databases",wcol:"instructor",wval:"Rao",nv:"Data Modeling"},i:{map:{instructor:"Park",course:"Algorithms"},need:"a student",lbl:"Park"},
+ d:{match:{student:"Cy",instructor:"Lee"},probe:"Lee",fact:"Lee teaches Databases",keep:"Lee still teaches Databases in the instructors table"}}};
+
+var cur=0,tables=[],busy=false,runId=0,soundOn=true,voiceOn=true,AC=null,res={};
+function tone(f,d,ty,g,t0){if(!AC||!soundOn)return;var o=AC.createOscillator(),a=AC.createGain(),t=AC.currentTime+(t0||0);o.type=ty||"triangle";o.frequency.value=f;a.gain.setValueAtTime(g||.06,t);a.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(a);a.connect(AC.destination);o.start(t);o.stop(t+d+.02)}
+function initAudio(){if(!soundOn)return;if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==="suspended")AC.resume()}
+function chime(){[523,659,784,1047].forEach(function(f,i){tone(f,.22,"triangle",.07,i*.1)})}
+function buzz(){tone(196,.4,"sawtooth",.05);tone(208,.4,"sawtooth",.05)}
+function swoosh(){[880,740,620,520,440].forEach(function(f,i){tone(f,.12,"triangle",.05,i*.05)})}
+function say(t){if(!voiceOn||!window.speechSynthesis||!t)return;try{speechSynthesis.speak(new SpeechSynthesisUtterance(t))}catch(e){}}
+function hush(){try{window.speechSynthesis&&speechSynthesis.cancel()}catch(e){}}
+function dur(t){return Math.max(2600,(voiceOn?t.split(" ").length*340:0))}
+function live(t){$("live").textContent=t}
+
+function render(anim){
+ var h="";tables.forEach(function(tb,ti){
+  h+='<div class="tcard'+(anim?' enter':'')+'"'+(anim?' style="animation-delay:'+ti*.18+'s"':'')+'><div class="tt">'+tb.title+'</div><div class="tscroll"><table class="d"><tr>'+
+   tb.cols.map(function(c){return '<th'+(c.k?' class="k"':'')+'>'+c.n+'</th>'}).join("")+'</tr>'+
+   tb.rows.map(function(r){return '<tr'+(r.gone?' class="gone"':'')+'>'+r.map(function(c,ci){var k=c.n?"n":c.s?"s":c.g?"g":c.b?"b":tb.cols[ci].k?"k":"";return '<td'+(k?' class="'+k+'"':'')+'>'+c.v+'</td>'}).join("")+'</tr>'}).join("")+
+   '</table></div></div>'});
+ $("tables").innerHTML=h}
+function cards(){var u=$("rU"),i=$("rI"),d=$("rD");
+ u.textContent=res.u==null?"–":res.u;u.className="big "+(res.u==null?"":res.u===1?"ok":"no");
+ i.textContent=res.i==null?"–":res.i?"✓ Yes":"✗ No";i.className="big "+(res.i==null?"":res.i?"ok":"no");
+ d.textContent=res.d==null?"–":res.d?"✓ Yes":"✗ No";d.className="big "+(res.d==null?"":res.d?"ok":"no")}
+function show(i){stop();cur=i;var s=ST[i],c=SC[s.sc];tables=s.build();res={};
+ $("tName").textContent=s.name;$("tAnalogy").textContent=s.a;$("tRule").textContent=s.rule;
+ $("bU").textContent=c.ub;$("bI").textContent=c.ib;$("bD").textContent=c.db;
+ Array.prototype.forEach.call($("tabs").children,function(b,k){b.setAttribute("aria-pressed",k===i)});
+ live("Press “Watch it happen”, or run a test.");cards();render(true)}
+function stop(){runId++;busy=false;hush();["bWatch","bU","bI","bD"].forEach(function(x){$(x).disabled=false})}
+function lock(v){busy=v;["bWatch","bU","bI","bD"].forEach(function(x){$(x).disabled=v})}
+ST.forEach(function(s,i){var b=document.createElement("button");b.textContent=s.tab;b.onclick=function(){show(i)};$("tabs").appendChild(b)});
+
+function watch(){stop();initAudio();var id=++runId,s=ST[cur],prev=(cur===0||cur===4)?-1:cur-1;lock(true);
+ function at(fn,ms){setTimeout(function(){if(id===runId)fn()},ms)}
+ if(prev<0){tables=s.build();render(true);buzz();live(s.why);say(s.a+" "+s.why);var t1=dur(s.a+" "+s.why);at(function(){live(s.left);say(s.left);lock(false)},t1);return}
+ tables=ST[prev].build();render(false);buzz();live("Before: "+s.why);say(s.why);var t2=dur(s.why);
+ at(function(){tables=s.build();render(true);swoosh();live(s.fix);say(s.fix)},t2);
+ var t3=t2+dur(s.fix);
+ at(function(){live(s.left);say(s.left);if(cur===5||cur===3||cur===2||cur===1)chime();lock(false)},t3)}
+
+function tUpdate(){if(busy)return;initAudio();var S=SC[ST[cur].sc].u,cells=[];
+ tables.forEach(function(tb,ti){var ci=tb.cols.map(function(c){return c.n}).indexOf(S.col),wi=S.wcol?tb.cols.map(function(c){return c.n}).indexOf(S.wcol):-1;
+  if(ci<0||(S.wcol&&wi<0))return;tb.rows.forEach(function(r,ri){if(r[ci].v===S.val&&(!S.wcol||r[wi].v===S.wval))cells.push([ti,ri,ci])})});
+ var id=++runId;lock(true);cells.forEach(function(c,i){tables[c[0]].rows[c[1]][c[2]].g=true;tone(440+i*110,.12,"triangle",.06,i*.12)});render(false);
+ live(cells.length+(cells.length===1?" cell holds":" cells hold")+" the old value “"+S.val+"” (gold). Each one must be edited.");
+ setTimeout(function(){if(id!==runId)return;cells.forEach(function(c,i){var x=tables[c[0]].rows[c[1]][c[2]];x.g=false;if(cells.length>1&&i===cells.length-1)x.s=true;else x.v=S.nv});render(false);
+  res.u=cells.length;cards();var m=cells.length===1?"One cell changed. The fact lives in one place, so nothing can disagree.":cells.length+" copies had to change, and one was missed (orange). The data now contradicts itself. That is an update anomaly.";
+  live(m);say(m);cells.length===1?chime():buzz();lock(false)},1500)}
+
+function tInsert(){if(busy)return;initAudio();var S=SC[ST[cur].sc].i,m=S.map,tb=null;
+ tables.forEach(function(t){if(!tb&&t.cols.every(function(c){return c.n in m}))tb=t});
+ var ok=!!tb;if(!tb)tb=tables[0];var row=tb.cols.map(function(c){return {v:m[c.n]||"NULL",b:!ok,n:!ok&&!m[c.n]}});tb.rows.push(row);render(false);
+ res.i=ok;cards();var msg=ok?"Added "+S.lbl+" as one clean row, with no made-up data.":"There was nowhere to put "+S.lbl+" without "+S.need+". The row is full of NULLs. That is an insert anomaly.";
+ live(msg);say(msg);ok?chime():buzz()}
+
+function tDelete(){if(busy)return;initAudio();var S=SC[ST[cur].sc].d,id=++runId;lock(true);
+ tables.forEach(function(tb){var names=tb.cols.map(function(c){return c.n});if(!Object.keys(S.match).every(function(k){return names.indexOf(k)>=0}))return;
+  tb.rows.forEach(function(r){if(Object.keys(S.match).every(function(k){return r[names.indexOf(k)].v===S.match[k]}))r.gone=true})});
+ render(false);tone(330,.2,"triangle",.06);
+ setTimeout(function(){if(id!==runId)return;tables.forEach(function(tb){tb.rows=tb.rows.filter(function(r){return !r.gone})});render(false);
+  var found=tables.some(function(tb){return tb.rows.some(function(r){return r.some(function(c){return c.v.indexOf(S.probe)>=0})})});
+  res.d=found;cards();var m=found?S.keep+".":"Removing the row also erased the fact that "+S.fact+". That is a delete anomaly.";
+  live(m);say(m);found?chime():buzz();lock(false)},1000)}
+
+$("bWatch").onclick=watch;$("bU").onclick=tUpdate;$("bI").onclick=tInsert;$("bD").onclick=tDelete;$("bReset").onclick=function(){show(cur)};
+$("bSound").onclick=function(){soundOn=!soundOn;this.setAttribute("aria-pressed",soundOn);this.textContent="Sound: "+(soundOn?"on":"off")};
+$("bVoice").onclick=function(){voiceOn=!voiceOn;this.setAttribute("aria-pressed",voiceOn);this.textContent="Voice: "+(voiceOn?"on":"off");if(!voiceOn)hush()};
+show(0);
+})();
+</script>
+</body>
+</html>

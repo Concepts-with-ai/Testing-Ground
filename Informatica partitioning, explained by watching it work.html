@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Informatica partitioning, explained by watching it work</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f3f5f7;--surface:#fff;--ink:#14212b;--mute:#5b6b78;--line:#d5dde3;--accent:#0b7a75;--bad:#c4452d;--good:#1f8a4c;--l0:#0b7a75;--l1:#7a5cc2;--l2:#c2487a;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--bad:#ff7a5c;--good:#55d68a;--l0:#3fc2b9;--l1:#a48cf0;--l2:#f07aa8;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--bad:#ff7a5c;--good:#55d68a;--l0:#3fc2b9;--l1:#a48cf0;--l2:#f07aa8;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:22px 16px 48px}
+h1{font-size:clamp(26px,4.6vw,42px);line-height:1.08;margin:0 0 10px;letter-spacing:-.02em}
+h2{margin:0 0 4px;font-size:24px;letter-spacing:-.01em}
+.lede{color:var(--mute);max-width:66ch;margin:0 0 18px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+button,select{font:inherit;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:8px 13px;border-radius:8px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700;padding:10px 20px}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.explain{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+.analogy{font-size:20px;line-height:1.35;margin:4px 0 10px;color:var(--accent);font-weight:700}
+.explain p{margin:0 0 6px}
+.use{color:var(--mute)}
+.params{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px}
+.params label{font:500 13px "IBM Plex Mono",monospace;color:var(--mute)}
+.params input[type=range]{vertical-align:middle;width:150px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}
+.board{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lbl{position:absolute;left:8px;font:500 12px "IBM Plex Mono",monospace;color:var(--mute)}
+.lane{position:absolute;left:6px;right:6px;border:1px solid var(--line);border-left-width:5px;border-radius:8px;background:var(--bg)}
+.lane.p0{border-left-color:var(--l0)}
+.lane.p1{border-left-color:var(--l1)}.lane.p2{border-left-color:var(--l2)}
+.lane .h{padding:4px 10px;font:500 13px "IBM Plex Mono",monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lane .bar{position:absolute;left:0;top:26px;height:3px;width:0;background:var(--accent)}
+.chip{position:absolute;left:0;top:0;width:34px;height:26px;border-radius:6px;font:500 11px "IBM Plex Mono",monospace;color:#fff;display:flex;align-items:center;justify-content:center;transition:transform .5s ease,opacity .3s;z-index:2}
+.chip.done{opacity:.3}
+.live{min-height:1.6em;margin:10px 0;font:500 14px "IBM Plex Mono",monospace;color:var(--mute)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font:400 12px "IBM Plex Mono",monospace;color:var(--mute);margin-bottom:12px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h3{font-size:14px;margin:0 0 4px;color:var(--mute);font-weight:500}
+.big{font:500 28px "IBM Plex Mono",monospace}
+.sub{font-size:13px;color:var(--mute)}
+.meter{height:8px;border-radius:4px;background:var(--line);margin-top:8px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.ok{color:var(--good)}.no{color:var(--bad)}
+#why{margin:14px 0;padding:12px 16px;border-left:5px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0;min-height:3em}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:18px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:500;white-space:nowrap}
+.cap{font-size:13px;color:var(--mute);margin-top:6px}
+@media (prefers-reduced-motion:reduce){.chip,.meter i{transition:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Informatica partitioning, explained by watching it work</h1>
+<p class="lede">Informatica can split one big job into several parallel lanes called partitions. The only question is how it decides which row goes to which lane. Pick a technique, press Play, watch the rows move and listen: each lane has its own note.</p>
+
+<div class="tabs" id="tabs" role="group" aria-label="Partitioning technique"></div>
+
+<section class="explain" aria-live="polite">
+  <h2 id="tName"></h2>
+  <p class="analogy" id="tAnalogy"></p>
+  <p id="tHow"></p>
+  <p class="use" id="tUse"></p>
+  <div class="params" id="pKeyW" hidden><label for="pKey">Partition key</label>
+    <select id="pKey"><option value="r">REGION</option><option value="c">CUSTOMER</option><option value="id">ORDER_ID</option></select></div>
+  <div class="params" id="pRangeW" hidden>
+    <label for="b1">Boundary 1: <span id="v1">8</span></label><input type="range" id="b1" min="1" max="22" value="8">
+    <label for="b2">Boundary 2: <span id="v2">16</span></label><input type="range" id="b2" min="2" max="23" value="16"></div>
+</section>
+
+<div class="controls">
+  <button class="go" id="bPlay">Play</button>
+  <button id="bReset">Reset</button>
+  <button id="bSound" aria-pressed="true">Sound: on</button>
+  <button id="bVoice" aria-pressed="true">Voice: on</button>
+</div>
+
+<div class="legend" id="legend"></div>
+<div class="board" id="board" aria-label="Animation: orders moving from the source into partitions"></div>
+<div class="live" id="live" aria-live="polite">Press Play to start.</div>
+
+<div class="grid">
+  <div class="card"><h3>Steps to finish (one lane needs 24)</h3><div class="big" id="tTime">–</div><div class="meter"><i id="tBar"></i></div></div>
+  <div class="card"><h3>Speed-up</h3><div class="big" id="tSpeed">–</div><div class="sub" id="tSpeedN">Compared with a single partition</div></div>
+  <div class="card"><h3>Each region stays in one lane?</h3><div class="big" id="tGroup">–</div><div class="sub" id="tGroupN">Needed before an Aggregator that groups by region</div></div>
+</div>
+<div id="why" aria-live="polite">Run a technique to see what it means.</div>
+
+<div class="tw"><table>
+<tr><th>Technique</th><th>Rows are sent by…</th><th>Same key together?</th><th>Balance</th><th>Typical use</th></tr>
+<tr><td>Pass-through</td><td>Staying where they started</td><td>Only if the source did it</td><td>As good as the source</td><td>Source already split well</td></tr>
+<tr><td>Round-robin</td><td>Taking turns</td><td>No</td><td>Best</td><td>Independent row work (filters, expressions)</td></tr>
+<tr><td>Hash auto-keys</td><td>Hash of group or sort columns, chosen for you</td><td>Yes</td><td>Depends on the data</td><td>Before an Aggregator, Sorter or Rank</td></tr>
+<tr><td>Hash user-keys</td><td>Hash of columns you choose</td><td>Yes, for those columns</td><td>Depends on your key</td><td>Same, with a key you control</td></tr>
+<tr><td>Key range</td><td>Value ranges you define</td><td>Within a range</td><td>Depends on your ranges</td><td>Dates, IDs, ordered data</td></tr>
+<tr><td>Database partitioning</td><td>The database’s own partitions</td><td>By database partition</td><td>Depends on the table layout</td><td>Already-partitioned Oracle or Db2 tables</td></tr>
+</table></div>
+<p class="cap">Based on the partition types in Informatica PowerCenter session properties. The data here is a made-up set of 24 orders, so the numbers are for learning, not benchmarking. Voice uses your browser’s built-in speech.</p>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var REG="EWENEWEEWENWEEWENWEEWNEW".split(""),RN={E:"East",W:"West",N:"North"},RC={E:"#3b6fd4",W:"#c9741a",N:"#2a8f55"};
+var ROWS=REG.map(function(r,i){return {id:i+1,r:r,c:(i%8)+1}});
+var HR={W:0,E:1,N:2},P={key:"r",b1:8,b2:16},NOTE=[262,330,392],D=110,TICK=320;
+var T=[
+{id:"single",tab:"Start here",name:"Start here: one partition",L:1,lane:function(){return 0},
+ a:"One cashier serves the whole queue. Everyone waits.",h:"This is the baseline: a single partition handles all 24 orders, one after another.",u:"Fine for small jobs. Slow when the data grows.",
+ s:"One cashier serves the whole queue. Every order waits its turn. This is our baseline."},
+{id:"pass",tab:"Pass-through",name:"Pass-through",L:3,lane:function(r){return r.id<=6?0:r.id<=12?1:2},nm:function(l){return "source file "+(l+1)},
+ a:"Three checkout lanes, and everyone stays in the lane they joined. Nobody switches.",h:"Rows are never moved between partitions. Each partition keeps whatever it started with, so an uneven source stays uneven.",u:"Use when the source is already split sensibly.",
+ s:"Three checkout lanes, and everyone stays in the lane they joined. Informatica does not move any rows, so the work is only as fair as the source files were."},
+{id:"rr",tab:"Round-robin",name:"Round-robin",L:3,lane:function(r){return (r.id-1)%3},
+ a:"Dealing a deck of cards: one card to each player in turn.",h:"Rows are handed out one at a time, evenly. Perfectly balanced, but related rows get scattered.",u:"Use for independent row work like filters and expressions.",
+ s:"Think of dealing cards. One row to each partition, in turn. Listen for the repeating three note pattern."},
+{id:"hauto",tab:"Hash auto-keys",name:"Hash auto-keys",L:3,lane:function(r){return HR[r.r]},
+ a:"Sorting mail by ZIP code: the same ZIP always goes to the same sorter.",h:"Informatica builds the key for you from the group-by columns of the Aggregator, Sorter or Rank in front of it. Here the key is REGION.",u:"Use right before an unsorted Aggregator, Sorter or Rank.",
+ s:"Like sorting mail by ZIP code. Informatica picks the key for you, here the region, so the same region always lands in the same partition."},
+{id:"huser",tab:"Hash user-keys",name:"Hash user-keys",L:3,lane:function(r){return P.key==="r"?HR[r.r]:P.key==="c"?(r.c-1)%3:r.id%3},
+ a:"Same mail sorting, but you choose which part of the address to sort by.",h:"You pick the key columns and Informatica hashes them. Try each key below and compare balance with grouping.",u:"Use when you need grouping on specific columns.",
+ s:"Same mail sorting, but now you choose the key. Try region, customer and order ID, and compare the results."},
+{id:"range",tab:"Key range",name:"Key range",L:3,lane:function(r){return r.id<=P.b1?0:r.id<=P.b2?1:2},nm:function(l){return "ORDER_ID "+[1,P.b1+1,P.b2+1][l]+"–"+[P.b1,P.b2,24][l]},
+ a:"Mailboxes labelled A to H, I to P, Q to Z: each range has its own box.",h:"You define value ranges for each partition and rows go to the partition whose range holds their key. Drag the boundaries below.",u:"Use when data is naturally ordered, like dates or IDs.",
+ s:"Like mailboxes labelled with ranges. You set the boundaries. Drag the sliders to see how fair or lopsided the ranges can be."},
+{id:"db",tab:"Database partitioning",name:"Database partitioning",L:3,lane:function(r){return HR[r.r]},nm:function(l){return ["P_WEST","P_EAST","P_NORTH"][l]},
+ a:"The warehouse already has a shelf for each product line, so send one worker to each shelf.",h:"For databases like Oracle and Db2 that already partition their tables, Informatica reads each database partition in parallel and splits nothing itself.",u:"Use when the source table is partitioned in the database.",
+ s:"The database already stores the data on separate shelves. Informatica sends one reader to each shelf, with no re-splitting at all."}];
+var cur=0,N=6,laneTop=[],srcTop=22,chips=[],map=[],loads=[],runId=0,running=false,soundOn=true,voiceOn=true,AC=null;
+var board=$("board");
+$("legend").innerHTML=["E","W","N"].map(function(k){return '<span><i style="background:'+RC[k]+'"></i>'+RN[k]+' ('+REG.filter(function(x){return x===k}).length+' orders)</span>'}).join("");
+ROWS.forEach(function(r){var c=document.createElement("div");c.className="chip";c.style.background=RC[r.r];c.textContent=r.r+r.id;c.title="Order "+r.id+", "+RN[r.r]+", customer "+r.c;board.appendChild(c);chips.push(c)});
+
+function tone(f,d,ty,g,t0){if(!AC||!soundOn)return;var o=AC.createOscillator(),a=AC.createGain(),t=AC.currentTime+(t0||0);o.type=ty||"triangle";o.frequency.value=f;a.gain.setValueAtTime(g||.06,t);a.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(a);a.connect(AC.destination);o.start(t);o.stop(t+d+.02)}
+function initAudio(){if(!soundOn)return;if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==="suspended")AC.resume()}
+function say(t){if(!voiceOn||!window.speechSynthesis)return;try{speechSynthesis.speak(new SpeechSynthesisUtterance(t))}catch(e){}}
+function hush(){try{window.speechSynthesis&&speechSynthesis.cancel()}catch(e){}}
+
+function compute(){var t=T[cur];map=ROWS.map(function(r){return t.lane(r)});loads=[];for(var l=0;l<t.L;l++)loads.push(0);map.forEach(function(l){loads[l]++})}
+function lbl(txt,y){var e=document.createElement("div");e.className="lbl";e.style.top=y+"px";e.textContent=txt;board.appendChild(e)}
+function srcPos(i){return {x:8+(i%N)*38,y:srcTop+Math.floor(i/N)*32}}
+function slotPos(l,j){return {x:8+(j%N)*38+6,y:laneTop[l]+34+Math.floor(j/N)*32}}
+function mv(c,p){c.style.transform="translate("+p.x+"px,"+p.y+"px)"}
+function laneName(l){var t=T[cur];return "Partition "+(l+1)+(t.nm?" · "+t.nm(l):"")}
+function render(){
+ var t=T[cur];compute();var W=board.clientWidth||600;N=Math.max(6,Math.floor((W-24)/38));
+ Array.prototype.slice.call(board.querySelectorAll(".lane,.lbl")).forEach(function(e){board.removeChild(e)});
+ lbl("Source: 24 orders waiting",2);var y=srcTop+Math.ceil(24/N)*32+8;lbl("Informatica sends each row to a partition (a parallel lane)",y);y+=24;laneTop=[];
+ for(var l=0;l<t.L;l++){var rows=Math.max(1,Math.ceil(loads[l]/N)),h=34+rows*32+6,b=document.createElement("div");
+  b.className="lane p"+l;b.style.top=y+"px";b.style.height=h+"px";b.innerHTML='<div class="h">'+laneName(l)+' · <span class="n">0 rows</span></div><i class="bar"></i>';board.appendChild(b);laneTop[l]=y;y+=h+8}
+ board.style.height=y+"px";chips.forEach(function(c,i){c.classList.remove("done");mv(c,srcPos(i))});
+ ["tTime","tSpeed","tGroup"].forEach(function(i){$(i).textContent="–";$(i).className="big"});$("tBar").style.width="0";$("tGroupN").textContent="Needed before an Aggregator that groups by region";
+ $("why").textContent="Run a technique to see what it means.";$("live").textContent="Press Play to start."}
+function showTech(){var t=T[cur];$("tName").textContent=t.name;$("tAnalogy").textContent=t.a;$("tHow").textContent=t.h;$("tUse").textContent=t.u;
+ $("pKeyW").hidden=t.id!=="huser";$("pRangeW").hidden=t.id!=="range";
+ Array.prototype.forEach.call($("tabs").children,function(b,i){b.setAttribute("aria-pressed",i===cur)});}
+function stop(){runId++;running=false;hush();$("bPlay").disabled=false;$("bPlay").textContent="Play"}
+function pick(i){stop();cur=i;showTech();render()}
+T.forEach(function(t,i){var b=document.createElement("button");b.textContent=t.tab;b.onclick=function(){pick(i)};$("tabs").appendChild(b)});
+
+function play(){
+ stop();initAudio();render();var id=++runId,t=T[cur],L=t.L;running=true;$("bPlay").disabled=true;say(t.s);
+ var i=0,slot=[0,0,0],q=[[],[],[]],pr=[0,0,0],ticks=0,lanesInfo=board.querySelectorAll(".lane");
+ function info(l){var s={};for(var k=0;k<24;k++)if(map[k]===l&&q[l].indexOf(k)>=0)s[ROWS[k].r]=1;
+  lanesInfo[l].querySelector(".n").textContent=slot[l]+" rows"+(slot[l]?" · "+Object.keys(s).map(function(x){return RN[x]}).join(", "):"")}
+ function disp(){if(id!==runId||i>=24)return;var l=map[i];mv(chips[i],slotPos(l,slot[l]++));q[l].push(i);
+  tone(NOTE[l],.13,"triangle",.07);$("live").textContent="Order "+ROWS[i].id+" ("+RN[ROWS[i].r]+") → Partition "+(l+1);info(l);i++;setTimeout(disp,D)}
+ function tick(){if(id!==runId)return;var busy=false;
+  for(var l=0;l<L;l++)if(pr[l]<loads[l]){busy=true;if(pr[l]<q[l].length){chips[q[l][pr[l]]].classList.add("done");pr[l]++;tone(NOTE[l]*2,.05,"sine",.025);
+   lanesInfo[l].querySelector(".bar").style.width=(100*pr[l]/loads[l])+"%"}}
+  if(!busy&&i>=24){finish();return}ticks++;$("tTime").textContent=ticks;$("tBar").style.width=Math.min(100,ticks/24*100)+"%";setTimeout(tick,TICK)}
+ function finish(){running=false;$("bPlay").disabled=false;$("bPlay").textContent="Replay";
+  var mx=Math.max.apply(null,loads),sp=24/mx,bi=loads.indexOf(mx);
+  $("tTime").textContent=mx;$("tBar").style.width=(mx/24*100)+"%";$("tSpeed").textContent=sp.toFixed(1)+"×";
+  var split=0,det=[];["E","W","N"].forEach(function(k){var s={};ROWS.forEach(function(r,j){if(r.r===k)s[map[j]]=1});var n=Object.keys(s).length;if(n>1)split++;det.push(RN[k]+": "+n+(n>1?" lanes":" lane"))});
+  var ok=split===0,g=$("tGroup");g.textContent=ok?"✓ Yes":"✗ No";g.className="big "+(ok?"ok":"no");$("tGroupN").textContent=det.join(" · ");
+  var W=L===1?"":(mx<=9?"The work was shared evenly. ":"Partition "+(bi+1)+" did "+Math.round(mx/24*100)+"% of the work, which limits the speed-up. ");
+  var G=ok?"Every region stayed together, so an Aggregator would give correct totals.":"Regions got scattered across lanes, so an Aggregator would output several partial rows for the same region.";
+  var X={single:"Baseline: 24 steps. Every other technique tries to beat this.",
+   pass:"Pass-through never moves rows, so the result is only as good as the source split.",
+   rr:"Round-robin is the fairest splitter, but it ignores what the rows contain. Don’t put an Aggregator right after it.",
+   hauto:"Same region, same lane, so grouping is safe. The price: East is the biggest region, so its lane works the most.",
+   huser:P.key==="r"?"REGION keeps regions together but is lopsided. Try CUSTOMER or ORDER_ID next.":P.key==="c"?"CUSTOMER spreads work fairly well and keeps each customer together, but regions are scattered. The right key depends on what you group by.":"ORDER_ID is perfectly even but groups nothing. The key you pick trades balance against grouping.",
+   range:"Ranges are only as good as your boundaries. Even boundaries balance the load, lopsided ones create a slow lane. Drag the sliders and replay.",
+   db:"The database already stored each region on its own shelf, so grouping comes free. The shelves are uneven, so East limits the speed-up."}[t.id];
+  $("why").textContent=X+" "+W+G;
+  if(ok||L===1)[523,659,784,1047].forEach(function(f,k){tone(f,.22,"triangle",.07,k*.1)});else{tone(196,.4,"sawtooth",.05);tone(208,.4,"sawtooth",.05)}
+  say("Finished in "+mx+" steps instead of 24. That is "+sp.toFixed(1)+" times faster. "+W+G)}
+ disp();setTimeout(tick,600)}
+
+$("bPlay").onclick=play;$("bReset").onclick=function(){stop();render()};
+$("bSound").onclick=function(){soundOn=!soundOn;this.setAttribute("aria-pressed",soundOn);this.textContent="Sound: "+(soundOn?"on":"off")};
+$("bVoice").onclick=function(){voiceOn=!voiceOn;this.setAttribute("aria-pressed",voiceOn);this.textContent="Voice: "+(voiceOn?"on":"off");if(!voiceOn)hush()};
+$("pKey").onchange=function(){P.key=this.value;stop();render()};
+function rng(){var a=+$("b1").value,b=+$("b2").value;if(b<=a){b=a+1;$("b2").value=b}P.b1=a;P.b2=b;$("v1").textContent=a;$("v2").textContent=b;stop();render()}
+$("b1").oninput=rng;$("b2").oninput=rng;
+var rt;window.addEventListener("resize",function(){clearTimeout(rt);rt=setTimeout(function(){if(!running)render()},150)});
+showTech();render();
+})();
+</script>
+</body>
+</html>
