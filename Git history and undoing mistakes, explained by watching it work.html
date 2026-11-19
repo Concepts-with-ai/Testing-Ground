@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Git history and undoing mistakes, explained by watching it work</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f3f5f7;--surface:#fff;--ink:#14212b;--mute:#5b6b78;--line:#d5dde3;--accent:#0b7a75;--a2:#3b6fd4;--a3:#c9741a;--bad:#c4452d;--good:#1f8a4c;--warn:#a86d00;--code:#eaf0f3;--addbg:rgba(31,138,76,.18);--delbg:rgba(196,69,45,.16);
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;--addbg:rgba(85,214,138,.2);--delbg:rgba(255,122,92,.18);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;--addbg:rgba(85,214,138,.2);--delbg:rgba(255,122,92,.18);color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:22px 16px 48px}
+h1{font-size:clamp(26px,4.6vw,42px);line-height:1.08;margin:0 0 10px;letter-spacing:-.02em}
+h2{margin:0 0 4px;font-size:24px;letter-spacing:-.01em}
+.lede{color:var(--mute);max-width:68ch;margin:0 0 16px}
+.tabs,.controls,.cmds{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+button,select{font:inherit;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:8px 13px;border-radius:8px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700;padding:10px 20px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+select#vsel{max-width:min(300px,100%)}
+.explain{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+.analogy{font-size:20px;line-height:1.35;margin:4px 0 8px;color:var(--accent);font-weight:700}
+.explain p{margin:0 0 6px}
+.board{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px;overflow-x:auto}
+#svg{display:block;width:100%;height:auto;min-width:420px}
+.cm{transition:transform .6s ease,opacity .5s ease}
+.cm.pick{cursor:pointer}
+.cm .ci{font:700 14px "IBM Plex Mono",monospace}
+.cm .ch{font:400 10px "IBM Plex Mono",monospace;fill:var(--mute)}
+.cm .cx{font:400 10px "Bricolage Grotesque",sans-serif;fill:var(--mute)}
+.lb text{font:500 12px "IBM Plex Mono",monospace}
+.lb{transition:transform .6s ease}
+button.cmd{font:500 13px "IBM Plex Mono",monospace}
+.bd{display:inline-block;margin-left:8px;font:500 10px "IBM Plex Mono",monospace;border-radius:999px;padding:1px 7px;color:#fff;vertical-align:1px}
+.bd.safe{background:var(--good)}.bd.careful{background:var(--warn)}.bd.danger{background:var(--bad)}
+.cmds{margin:12px 0 4px}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.seg button{border:0;border-radius:0}
+.live{min-height:3.2em;margin:10px 0;padding:10px 14px;border-left:5px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.term{background:var(--code);border-radius:8px;padding:12px;font:400 13px/1.5 "IBM Plex Mono",monospace;min-height:150px;max-height:280px;overflow:auto;white-space:pre-wrap}
+.term .c{color:var(--accent);font-weight:500}.term .e{color:var(--bad)}.term .o{color:var(--mute)}.term .h{cursor:pointer}.term .hl{background:rgba(201,116,31,.28)}
+.side{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.side h3{margin:0 0 6px;font-size:16px}.side p{margin:0 0 8px}
+.chip{display:inline-block;font:500 11px "IBM Plex Mono",monospace;border-radius:999px;padding:2px 9px;border:1px solid var(--line);color:var(--mute);margin:0 4px 4px 0}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}.chip.red{background:var(--bad);color:#fff;border-color:var(--bad)}
+.warn{padding:8px 12px;border-radius:8px;background:var(--delbg);border-left:5px solid var(--bad);margin:8px 0}
+.diff{background:var(--code);border-radius:8px;padding:8px 0;font:400 13px/1.6 "IBM Plex Mono",monospace}
+.diff div{padding:0 12px;white-space:pre-wrap}.diff .a{background:var(--addbg)}.diff .d{background:var(--delbg)}
+.rl{display:flex;gap:8px;align-items:center;font:400 12px "IBM Plex Mono",monospace;padding:3px 0;border-bottom:1px solid var(--line)}
+.rl span{flex:1}.rl button{padding:2px 9px;font-size:12px}
+#blameW{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 0;overflow-x:auto}
+.bl{display:grid;grid-template-columns:62px 50px 100px 30px 1fr;gap:8px;padding:3px 12px;font:400 13px/1.6 "IBM Plex Mono",monospace;border-left:5px solid transparent;cursor:pointer;min-width:560px}
+.bl .bh,.bl .ba,.bl .bt{opacity:0;transition:opacity .5s}
+.bl.on .bh,.bl.on .ba,.bl.on .bt{opacity:1}
+.bl .bn{color:var(--mute);text-align:right}.bl .bh{font-weight:500}.bl .bt,.bl .ba{color:var(--mute)}
+.bl.dim{opacity:.35}.bl.sel{background:rgba(201,116,31,.2)}.bl pre{margin:0;font:inherit;white-space:pre}
+#zonesW{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.zb{position:absolute;top:6px;bottom:6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:6px 10px;font:500 12px "IBM Plex Mono",monospace;color:var(--mute)}
+.zc{position:absolute;left:0;top:0;height:44px;border-radius:8px;padding:6px 10px;font:500 13px "IBM Plex Mono",monospace;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;transition:transform .6s ease,opacity .5s ease,background .3s;z-index:2;cursor:pointer}
+.zc.edit{background:var(--a3);color:#fff}.zc.stg{background:var(--accent)}.zc.com{background:var(--surface);border:2px solid var(--line);color:var(--ink);z-index:1}
+.zc.sel{outline:3px solid var(--ink)}.zc.gone{background:var(--bad)}.zc.pulse{border-color:var(--good)}
+.quiz{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.qtop{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;font:500 13px "IBM Plex Mono",monospace;color:var(--mute)}
+.qbar{height:6px;background:var(--line);border-radius:3px;margin-bottom:12px;overflow:hidden}
+.qbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s linear}
+.quiz h3{margin:0 0 6px;font-size:22px}
+.opts{display:grid;gap:8px;margin-top:10px}
+.opt{text-align:left;padding:10px 14px;background:var(--bg)}
+.opt:disabled{opacity:1;cursor:default}
+.opt.best{border-color:var(--good);background:var(--addbg)}
+.opt.mid{border-color:var(--warn);background:rgba(168,109,0,.16)}
+.opt.bad{border-color:var(--bad);background:var(--delbg)}
+.opt.picked{outline:3px solid var(--ink)}
+.fbk{margin-top:14px;padding:12px 14px;border-radius:8px;background:var(--bg);border-left:5px solid var(--accent)}
+.fbk.best{border-left-color:var(--good)}.fbk.mid{border-left-color:var(--warn)}.fbk.bad{border-left-color:var(--bad)}
+.fbk h4{margin:0 0 4px;font-size:18px}.fbk p{margin:0 0 8px}
+.quiz ul{padding-left:20px}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:18px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:500;white-space:nowrap}
+code{font-family:"IBM Plex Mono",monospace;font-size:.92em}
+.cap{font-size:13px;color:var(--mute);margin-top:10px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.cm,.lb,.zc{transition:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Git history and undoing mistakes, explained by watching it work</h1>
+<p class="lede">Everyone makes mistakes with Git, and almost every mistake can be fixed. First you learn to read the history. Then you learn which undo commands are safe and which ones can hurt. Press <b>Play</b> to watch, or click the commands yourself. A soft voice and gentle sounds explain each step.</p>
+
+<div class="tabs" id="tabs" role="group" aria-label="Topic"></div>
+
+<section class="explain" aria-live="polite">
+  <h2 id="tName"></h2>
+  <p class="analogy" id="tAnalogy"></p>
+  <p id="tRule"></p>
+</section>
+
+<div class="controls">
+  <button class="go" id="bPlay">Play</button>
+  <button id="bReset">Reset</button>
+  <button id="bSound" aria-pressed="true">Sound: on</button>
+  <button id="bVoice" aria-pressed="true">Voice: on</button>
+  <select id="vsel" aria-label="Voice choice"></select>
+</div>
+
+<div id="lab">
+  <div class="seg" id="fsel" role="group" aria-label="Choose a file" hidden></div>
+  <div class="board" id="boardW"><svg id="svg" viewBox="0 0 560 260" role="img" aria-label="Commit graph"></svg></div>
+  <div id="blameW" hidden></div>
+  <div id="zonesW" hidden></div>
+  <div class="cmds" id="cmds"></div>
+  <div class="live" id="cap" aria-live="polite"></div>
+  <div class="two">
+    <div class="term" id="term" aria-label="Terminal"></div>
+    <div class="side" id="side"></div>
+  </div>
+</div>
+
+<div id="quiz" hidden>
+  <div class="quiz">
+    <div class="qtop"><span id="qprog"></span><span id="qscore"></span></div>
+    <div class="qbar"><i id="qb"></i></div>
+    <div id="qbody" aria-live="polite"></div>
+  </div>
+</div>
+
+<div class="tw"><table>
+<tr><th>Command</th><th>What it does</th><th>Safety</th></tr>
+<tr><td><code>git log --oneline --graph --all</code></td><td>Draws the history of every branch as a picture</td><td>Safe: only reads</td></tr>
+<tr><td><code>git blame &lt;file&gt;</code></td><td>Shows who last changed each line, and in which commit</td><td>Safe: only reads</td></tr>
+<tr><td><code>git restore --staged &lt;file&gt;</code></td><td>Takes a file out of the staging area. Edits stay.</td><td>Safe</td></tr>
+<tr><td><code>git restore &lt;file&gt;</code></td><td>Throws away your edits and brings back the last commit</td><td>Destructive: edits can’t be recovered</td></tr>
+<tr><td><code>git revert &lt;commit&gt;</code></td><td>Adds a new commit that does the opposite</td><td>Safe, even for pushed commits</td></tr>
+<tr><td><code>git reset --soft / --mixed</code></td><td>Moves the branch back and keeps your changes</td><td>Careful: rewrites history</td></tr>
+<tr><td><code>git reset --hard</code></td><td>Moves the branch back and throws the changes away</td><td>Destructive, though reflog can often rescue the commits</td></tr>
+<tr><td><code>git reflog</code></td><td>A diary of where HEAD has been, so lost commits can be found</td><td>Safe: only reads</td></tr>
+</table></div>
+<p class="cap">The commits, names and dates here are made up. Output is simplified, so your real Git may format a few lines differently. Voice uses your browser’s built-in speech, and sound starts after your first click.</p>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var NS="http://www.w3.org/2000/svg",svg=$("svg"),COLS=["var(--accent)","var(--a2)","var(--a3)"],BC={main:0,feature:1,"origin/main":2};
+var S={},els={},gE,gN,gL,tab=0,runId=0,soundOn=true,voiceOn=true,AC=null,lastCap="";
+
+/* ---------- audio: soft and quiet ---------- */
+function tone(f,d,ty,g,t0){if(!AC||!soundOn)return;var o=AC.createOscillator(),a=AC.createGain(),t=AC.currentTime+(t0||0);o.type=ty||"sine";o.frequency.value=f;a.gain.setValueAtTime(g||.03,t);a.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(a);a.connect(AC.destination);o.start(t);o.stop(t+d+.02)}
+function initAudio(){if(!soundOn)return;if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==="suspended")AC.resume()}
+var SFX={commit:function(){tone(520,.1,"sine",.035)},sw:function(){tone(330,.12);tone(294,.14,"sine",.03,.09)},pick:function(){tone(700,.09,"triangle",.035)},
+ soft:function(){tone(220,.3,"triangle",.035);tone(208,.3,"triangle",.03,.05)},ok:function(){[523,659,784].forEach(function(f,i){tone(f,.28,"sine",.033,i*.1)})},
+ reveal:function(){[392,440,494].forEach(function(f,i){tone(f,.14,"sine",.03,i*.1)})},undo:function(){tone(494,.12);tone(392,.16,"sine",.03,.1)}};
+
+/* ---------- voice: gentle, Google US English first ---------- */
+var VX={voice:null,list:[],auto:true};
+function vScore(v){var n=v.name,s=0;if(!/^en/i.test(v.lang))return -999;s+=10;if(/en[-_]US/i.test(v.lang))s+=3;if(/^Google US English$/i.test(n))s+=200;
+ if(/natural|neural|online/i.test(n))s+=60;if(/premium|enhanced|siri/i.test(n))s+=40;
+ if(/aria|jenny|michelle|ava\b|emma|sonia|libby|clara|nancy|jane|sara|zira|samantha|allison|susan|karen|moira|serena|tessa|fiona|victoria|zoe|joanna|salli|kendra|kimberly|female/i.test(n))s+=25;
+ if(/david|mark|guy|daniel|alex\b|fred|ryan|george|james|thomas|oliver|\bmale\b|rishi|aaron|arthur|gordon|ralph|junior|albert|eddy|reed|rocko|sandy|shelley|grandma|grandpa|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|hysterical/i.test(n))s-=60;
+ if(/compact|espeak/i.test(n))s-=30;return s}
+function chooseVoice(){if(!window.speechSynthesis)return;var all=speechSynthesis.getVoices()||[];
+ VX.list=all.filter(function(v){return vScore(v)>-100}).sort(function(a,b){return vScore(b)-vScore(a)});if(VX.auto||!VX.voice)VX.voice=VX.list[0]||null;
+ $("vsel").innerHTML='<option value="">Auto: best available female voice</option>'+VX.list.map(function(v,i){return '<option value="'+i+'">'+v.name+' ('+v.lang+')</option>'}).join("")}
+var PRON=[[/--/g,"dash dash "],[/\bID\b/g,"I D"],[/\bIDs\b/g,"I Ds"],[/[′★▸]/g,""],[/\(\)/g,""],[/_/g," "],[/HEAD~1/g,"head tilde one"],[/\bHEAD\b/g,"head"],[/\.yml\b/g," dot Y M L"]];
+function speakable(t){PRON.forEach(function(p){t=t.replace(p[0],p[1])});return t}
+function say(t){if(!voiceOn||!window.speechSynthesis||!t)return;
+ try{var parts=speakable(t).match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[t],out=[];
+  parts.forEach(function(p){p=p.trim();if(!p)return;if(out.length&&out[out.length-1].length<28)out[out.length-1]+=" "+p;else out.push(p)});
+  out.forEach(function(p){var u=new SpeechSynthesisUtterance(p);if(VX.voice){u.voice=VX.voice;u.lang=VX.voice.lang}else u.lang="en-US";u.rate=.92;u.pitch=1;u.volume=.85;speechSynthesis.speak(u)})}catch(e){}}
+function hush(){try{window.speechSynthesis&&speechSynthesis.cancel()}catch(e){}}
+function dur(t){return Math.max(2400,voiceOn?t.split(" ").length*380:0)}
+
+/* ---------- graph engine ---------- */
+function addC(id,p,x,y,o){var c={id:id,p:p,x:x,y:y};if(o)for(var k in o)c[k]=o[k];S.cm.push(c);return c}
+function cmt(id){for(var i=0;i<S.cm.length;i++)if(S.cm[i].id===id)return S.cm[i]}
+function byH(h){for(var i=0;i<S.cm.length;i++)if(S.cm[i].h===h)return S.cm[i]}
+function anc(a,b){if(a===b)return true;var c=cmt(b);return c?c.p.some(function(p){return anc(a,p)}):false}
+function pos(c){return {x:50+c.x*74,y:96+c.y*78}}
+function el(tag,at,par){var e=document.createElementNS(NS,tag);for(var k in at)e.setAttribute(k,at[k]);(par||svg).appendChild(e);return e}
+function clearSvg(){els={};svg.innerHTML="";gE=el("g");gN=el("g");gL=el("g")}
+function draw(){
+ if(!S.cm)return;var mx=0,my=0,used={};S.cm.forEach(function(c){mx=Math.max(mx,c.x);my=Math.max(my,c.y)});
+ svg.setAttribute("viewBox","0 0 "+Math.max(560,60+mx*74+90)+" "+(96+my*78+80));
+ S.cm.forEach(function(c){c.p.forEach(function(pid){var p=cmt(pid);if(!p)return;var k="e"+c.id+">"+pid;used[k]=1;var e=els[k],o=c.ghost?.35:c.dim?.3:1;
+  if(!e){e=el("path",{fill:"none","stroke-width":3,"stroke-linecap":"round"},gE);els[k]=e;e.style.opacity=0;e.style.transition="opacity .4s";(function(e,o,f){setTimeout(function(){e.style.opacity=o},f?550:60)})(e,o,c.from)}
+  else e.style.opacity=o;
+  var a=pos(p),b=pos(c);e.setAttribute("d",a.y===b.y?"M"+a.x+" "+a.y+"L"+b.x+" "+b.y:"M"+a.x+" "+a.y+"C"+(a.x+44)+" "+a.y+","+(b.x-44)+" "+b.y+","+b.x+" "+b.y);
+  e.setAttribute("stroke",COLS[c.c!=null?c.c:Math.min(c.y,2)]);e.setAttribute("stroke-dasharray",c.ghost?"5 5":"")})});
+ S.cm.forEach(function(c){var p=pos(c),k="c"+c.id;used[k]=1;var g=els[k];
+  if(!g){g=el("g",{"class":"cm"},gN);els[k]=g;var f=c.from?pos(c.from):p;g.style.transform="translate("+f.x+"px,"+f.y+"px)";g.style.opacity=c.from?1:0;
+   g.innerHTML='<circle class="rg" r="25" fill="none" stroke-width="3"></circle><circle class="cc" r="19"></circle><text class="ci" y="5" text-anchor="middle"></text><text class="ch" y="36" text-anchor="middle"></text><text class="cx" y="49" text-anchor="middle"></text>';g.getBoundingClientRect()}
+  g.style.transform="translate("+p.x+"px,"+p.y+"px)";g.style.opacity=c.ghost?.45:c.dim?.3:1;
+  var col=COLS[c.c!=null?c.c:Math.min(c.y,2)],cc=g.querySelector(".cc"),rg=g.querySelector(".rg");
+  cc.setAttribute("fill",c.ghost?"none":col);cc.setAttribute("stroke",c.ghost?col:"none");cc.setAttribute("stroke-width",2);cc.setAttribute("stroke-dasharray",c.ghost?"4 3":"");
+  rg.setAttribute("stroke",S.sel===c.id?"var(--ink)":"none");
+  var ci=g.querySelector(".ci");ci.textContent=c.id;ci.setAttribute("fill",c.ghost?"var(--ink)":"#fff");
+  g.querySelector(".ch").textContent=c.h;g.querySelector(".cx").textContent=c.m||"";
+  g.setAttribute("class","cm"+(T[tab].pick?" pick":""));g.onclick=function(){T[tab].pick&&T[tab].pick(c)}});
+ var at={};Object.keys(S.br).forEach(function(b){(at[S.br[b]]=at[S.br[b]]||[]).push(b)});
+ Object.keys(at).forEach(function(cid){var c=cmt(cid);if(!c)return;var p=pos(c);at[cid].forEach(function(b,i){var k="l"+b;used[k]=1;var g=els[k],head=S.head===b,txt=(head?"HEAD ▸ ":"")+b,w=txt.length*7.4+20,col=COLS[BC[b]!=null?BC[b]:1];
+  if(!g){g=el("g",{"class":"lb"},gL);els[k]=g;g.innerHTML='<rect height="22" rx="11" y="-16"></rect><text y="0" text-anchor="middle"></text>';g.style.transform="translate("+p.x+"px,"+(p.y-40-i*26)+"px)";g.getBoundingClientRect()}
+  var r=g.querySelector("rect"),t=g.querySelector("text");r.setAttribute("width",w);r.setAttribute("x",-w/2);r.setAttribute("fill",head?col:"var(--surface)");r.setAttribute("stroke",col);r.setAttribute("stroke-width",2);r.setAttribute("stroke-dasharray",b.indexOf("/")>=0?"4 3":"");
+  t.textContent=txt;t.setAttribute("fill",head?"#fff":col);g.style.transform="translate("+p.x+"px,"+(p.y-40-i*26)+"px)"})});
+ for(var k in els)if(!used[k]){els[k].remove();delete els[k]}}
+
+/* ---------- terminal, caption, commands ---------- */
+function out(s,cls,h){var d=document.createElement("div");d.textContent=s;if(cls)d.className=cls;if(h){d.className=(cls||"")+" h";d.setAttribute("data-h",h);d.onclick=function(){T[tab].pick&&T[tab].pick(byH(h))}}$("term").appendChild(d);$("term").scrollTop=$("term").scrollHeight}
+function cap(t,speak){lastCap=t;$("cap").textContent=t;if(speak!==false){hush();say(t)}}
+function exec(c){if(!c.ok())return;initAudio();out("$ "+c.t.replace(/<[^>]*>/g,""),"c");c.run();redraw();refresh()}
+function refresh(){var box=$("cmds");box.innerHTML="";(T[tab].cmds?T[tab].cmds():[]).forEach(function(c){var b=document.createElement("button");b.className="cmd";b.textContent=c.t;
+  if(c.b){var s=document.createElement("span");s.className="bd "+c.b;s.textContent=c.b==="safe"?"safe":c.b==="careful"?"careful":"destructive";b.appendChild(s)}
+  b.disabled=!c.ok();b.onclick=function(){exec(c)};box.appendChild(b)});renderSide()}
+function redraw(){if(tab===0||tab===3)draw();if(tab===1)renderBlame();if(tab===2)renderZones()}
+function side(h,fn){var s=$("side");s.innerHTML="";var e=document.createElement("h3");e.textContent=h;s.appendChild(e);fn(s)}
+function para(s,t){var p=document.createElement("p");p.textContent=t;s.appendChild(p);return p}
+function renderSide(){var t=T[tab];if(t.side)t.side();else side("Good to know",function(s){para(s,t.tip)})}
+
+/* ---------- 1. log ---------- */
+var META={a1f3:{a:"Ana",d:"Mon Feb 5 09:12:00 2024",m:"Add readme"},b72c:{a:"Ben",d:"Tue Feb 6 14:30:00 2024",m:"Add login page"},d48e:{a:"Ana",d:"Wed Feb 7 11:05:00 2024",m:"Fix typo"},c3d9:{a:"Ben",d:"Thu Feb 8 10:20:00 2024",m:"Add search"},e5a0:{a:"Cy",d:"Fri Feb 9 16:45:00 2024",m:"Polish search"}};
+function full(h){return (h+"7f3a9c1e5b20d84a6e").repeat(3).slice(0,40)}
+var DECO={d48e:"(HEAD -> main)",e5a0:"(feature)"},HEADSET=["d48e","b72c","a1f3"];
+function logRun(kind){var all=kind===3,set=all?["e5a0","c3d9","d48e","b72c","a1f3"]:HEADSET;
+ S.cm.forEach(function(c){c.dim=!all&&(c.id==="C"||c.id==="E")});S.sel=null;
+ if(kind===0)set.forEach(function(h){var m=META[h];out("commit "+full(h)+(DECO[h]?" "+DECO[h]:""),"",h);out("Author: "+m.a+" <"+m.a.toLowerCase()+"@example.com>","",h);out("Date:   "+m.d+" +0000","",h);out("","");out("    "+m.m,"",h);out("","")});
+ else if(kind<3)set.forEach(function(h){out(kind===2?"* "+h+(DECO[h]?" "+DECO[h]:"")+" "+META[h].m:h+(DECO[h]?" "+DECO[h]:"")+" "+META[h].m,"",h)});
+ else{out("* e5a0 (feature) Polish search","","e5a0");out("* c3d9 Add search","","c3d9");out("| * d48e (HEAD -> main) Fix typo","","d48e");out("|/","o");out("* b72c Add login page","","b72c");out("* a1f3 Add readme","","a1f3")}
+ var c=["The plain log lists commits from newest to oldest, with author and date. It is detailed, but long.","Oneline squeezes each commit into a single line: a short ID, then the message.","Adding graph draws the branch lines. Here there is one straight line, because you only see the history of your current branch.","Adding all shows every branch. Now you can see feature splitting off from main at the login page."][kind];
+ cap(c);SFX.reveal()}
+function lineOf(h){return Array.prototype.slice.call($("term").querySelectorAll("[data-h]")).filter(function(d){return d.getAttribute("data-h")===h})}
+T0pick=function(c){if(!c)return;S.sel=c.id;Array.prototype.forEach.call($("term").querySelectorAll(".hl"),function(d){d.classList.remove("hl")});lineOf(c.h).forEach(function(d){d.classList.add("hl")});
+ var m=META[c.h];cap("This is commit "+c.h+": “"+m.m+"”, written by "+m.a+".",false);SFX.pick();draw()};
+var T0pick;
+
+/* ---------- 2. blame ---------- */
+var BL=[{n:1,h:"a1f3",c:"def total(items):"},{n:2,h:"a1f3",c:"    subtotal = sum(i.price for i in items)"},{n:3,h:"c3d9",c:"    tax = subtotal * 0.08"},{n:4,h:"c3d9",c:"    return subtotal - tax"},{n:5,h:"a1f3",c:""},{n:6,h:"a1f3",c:"def greet(name):"},{n:7,h:"e5a0",c:"    return \"Hello, \" + name"}];
+var BM={a1f3:{a:"Ana",t:"3 weeks ago",m:"Add total and greet",col:"var(--accent)",d:["+def total(items):","+    subtotal = sum(i.price for i in items)","+    return subtotal","+","+def greet(name):","+    return \"Hi \" + name"]},
+ c3d9:{a:"Ben",t:"9 days ago",m:"Add tax",col:"var(--a2)",d:["-    return subtotal","+    tax = subtotal * 0.08","+    return subtotal - tax"]},
+ e5a0:{a:"Cy",t:"2 days ago",m:"Friendlier greeting",col:"var(--a3)",d:["-    return \"Hi \" + name","+    return \"Hello, \" + name"]}};
+var B={mode:0,range:null,sel:null};
+function bline(l){var m=BM[l.h];return l.h+" ("+(m.a+"    ").slice(0,4)+" "+(m.t+"           ").slice(0,12)+" "+l.n+") "+l.c}
+function renderBlame(){var w=$("blameW");w.innerHTML="";BL.forEach(function(l){var m=BM[l.h],r=document.createElement("div");r.className="bl"+(B.mode?" on":"")+(B.range&&(l.n<B.range[0]||l.n>B.range[1])?" dim":"")+(B.sel===l.h&&B.mode?" sel":"");
+ r.style.borderLeftColor=B.mode?m.col:"transparent";r.innerHTML='<span class="bh"></span><span class="ba"></span><span class="bt"></span><span class="bn"></span><pre></pre>';
+ r.querySelector(".bh").textContent=l.h;r.querySelector(".ba").textContent=m.a;r.querySelector(".bt").textContent=m.t;r.querySelector(".bn").textContent=l.n;r.querySelector("pre").textContent=l.c||" ";
+ r.onclick=function(){selLine(l.n)};w.appendChild(r)})}
+function selLine(n){var l=BL[n-1];if(!B.mode){cap("Run git blame first, then click a line to see who changed it.",false);return}B.sel=l.h;var m=BM[l.h];SFX.pick();
+ cap("Line "+n+" was last changed by "+m.a+", "+m.t+", in commit "+l.h+": “"+m.m+"”. Blame is about finding the story behind a line, not about finding someone to blame.");renderBlame();refresh()}
+
+/* ---------- 3. restore ---------- */
+var FN=["notes.txt","app.py","readme.md"],Z={f:[],sel:0,zc:{}};
+function zinit(){Z.f=[{st:"mod",v:1},{st:"stg",v:1},{st:"clean",v:1}];Z.sel=0;Z.zc={};$("zonesW").innerHTML="";var fs=$("fsel");fs.innerHTML="";FN.forEach(function(n,i){var b=document.createElement("button");b.textContent=n;b.setAttribute("aria-pressed",i===0);b.onclick=function(){Z.sel=i;Array.prototype.forEach.call(fs.children,function(x,k){x.setAttribute("aria-pressed",k===i)});renderZones();refresh()};fs.appendChild(b)})}
+function renderZones(){var w=$("zonesW"),W=w.clientWidth||700,cw=(W-16)/3,rowH=56;w.style.height=(52+3*rowH+10)+"px";
+ if(!Z.zc.built){w.innerHTML="";["Working folder (your edits)","Staging area (ready to save)","Last commit (saved)"].forEach(function(t,i){var b=document.createElement("div");b.className="zb";b.textContent=t;w.appendChild(b);Z.zc["b"+i]=b});
+  FN.forEach(function(n,i){var c=document.createElement("div");c.className="zc com";w.appendChild(c);Z.zc["c"+i]=c;var e=document.createElement("div");e.className="zc edit";e.style.opacity=0;w.appendChild(e);Z.zc["e"+i]=e;
+   c.onclick=e.onclick=function(){Z.sel=i;Array.prototype.forEach.call($("fsel").children,function(x,k){x.setAttribute("aria-pressed",k===i)});renderZones();refresh()}});Z.zc.built=1}
+ for(var i=0;i<3;i++){var b=Z.zc["b"+i];b.style.left=(8+i*cw)+"px";b.style.width=(cw-8)+"px"}
+ FN.forEach(function(n,i){var f=Z.f[i],c=Z.zc["c"+i],e=Z.zc["e"+i],y=40+i*rowH;
+  c.style.width=(cw-26)+"px";e.style.width=(cw-26)+"px";c.style.transform="translate("+(16+2*cw)+"px,"+y+"px)";c.textContent=n+"  v"+f.v;c.classList.toggle("sel",Z.sel===i);
+  var col=f.st==="mod"?0:f.st==="stg"?1:(f.fx==="gone"?0:2);e.style.transform="translate("+(16+col*cw)+"px,"+y+"px)";e.style.opacity=f.st==="clean"?0:1;
+  e.className="zc "+(f.st==="stg"?"stg":"edit")+(f.fx==="gone"?" gone":"")+(Z.sel===i?" sel":"");e.textContent=(f.st==="stg"?"✓ ":"✎ ")+n})}
+function zstatus(){var st=[],un=[];FN.forEach(function(n,i){if(Z.f[i].st==="stg")st.push(n);if(Z.f[i].st==="mod")un.push(n)});var L=["On branch main"];
+ if(st.length){L.push("Changes to be committed:","  (use \"git restore --staged <file>...\" to unstage)");st.forEach(function(n){L.push("        modified:   "+n)});L.push("")}
+ if(un.length){L.push("Changes not staged for commit:","  (use \"git add <file>...\" to update what will be committed)","  (use \"git restore <file>...\" to discard changes in working directory)");un.forEach(function(n){L.push("        modified:   "+n)});L.push("")}
+ if(!st.length&&!un.length)L.push("nothing to commit, working tree clean");return L}
+
+/* ---------- 4. undo commits ---------- */
+function shortRl(){return S.rl.map(function(e,i){return e.h+" HEAD@{"+i+"}: "+e.m})}
+function reach(){var r={};Object.keys(S.br).forEach(function(b){(function w(id){var c=cmt(id);if(!c||r[id])return;r[id]=1;c.p.forEach(w)})(S.br[b])});return r}
+function relane(){var r=reach();S.cm.forEach(function(c){c.ghost=!r[c.id];c.y=c.ghost?1:0})}
+function tipC(){return cmt(S.br.main)}
+function undoInit(){S={cm:[],br:{main:"E","origin/main":"C"},head:"main",sel:null,chg:null,rl:[],showRl:false,warn:false};
+ [["A","Start",[]],["B","Add login",["A"]],["C","Add search",["B"]],["D","Add banner",["C"]],["E","Oops: delete config",["D"]]].forEach(function(r,i){addC(r[0],r[2],i,0,{h:["a1f3","b72c","c3d9","d48e","e5a0"][i],m:r[1]})});
+ S.rl=[{h:"e5a0",m:"commit: Oops: delete config"},{h:"d48e",m:"commit: Add banner"},{h:"c3d9",m:"commit: Add search"},{h:"b72c",m:"commit: Add login"},{h:"a1f3",m:"commit (initial): Start"}]}
+function hasGhost(){return S.cm.some(function(c){return c.ghost})}
+function goBack(mode,label){var old=tipC(),par=cmt(old.p[0]);S.br.main=par.id;relane();S.chg=mode;S.rl.unshift({h:par.h,m:"reset: moving to HEAD~1"});S.warn=!anc(S.br["origin/main"],S.br.main);
+ out(mode==="gone"?"HEAD is now at "+par.h+" "+par.m:(mode==="working"?"Unstaged changes after reset:\nD\tconfig.yml":""),"o");
+ var base={staged:"The branch steps back one commit. The changes from that commit stay staged, ready to commit again.",working:"The branch steps back one commit. The changes stay in your folder, but are no longer staged.",gone:"The branch steps back and the changes are thrown away from your folder. The commit isn’t deleted yet, though. The reflog remembers it."}[mode];
+ cap(base+(S.warn?" Careful: you stepped behind commits that are already pushed.":""));mode==="gone"?SFX.soft():SFX.undo()}
+function recoverTo(h){var c=byH(h);if(!c||S.br.main===c.id)return;S.br.main=c.id;relane();S.chg=null;S.rl.unshift({h:h,m:"reset: moving to "+h});S.warn=!anc(S.br["origin/main"],S.br.main);out("HEAD is now at "+h+" "+c.m,"o");cap("Recovered. The reflog remembered where HEAD had been, so the commit is back on your branch.");SFX.ok();draw();refresh()}
+
+/* ---------- topics ---------- */
+var T=[
+{tab:"1. Reading history",name:"Reading history: git log",a:"The log is a diary of your project. The graph turns it into a map.",rule:"git log lists commits from newest to oldest. Add --oneline to shorten it, --graph to draw the branches, and --all to include every branch. Click a line, or a commit, to link them.",
+ start:"Press Play, or click a command.",pick:function(c){T0pick(c)},
+ init:function(){S={cm:[],br:{main:"D",feature:"E"},head:"main",sel:null};addC("A",[],0,0,{h:"a1f3",m:"readme"});addC("B",["A"],1,0,{h:"b72c",m:"login"});addC("D",["B"],2,0,{h:"d48e",m:"fix typo"});addC("C",["B"],2,1,{h:"c3d9",m:"search"});addC("E",["C"],3,1,{h:"e5a0",m:"polish"})},
+ auto:["l0","l1","l2","l3"],
+ cmds:function(){return [{k:"l0",t:"git log",ok:function(){return true},run:function(){$("term").innerHTML="";out("$ git log","c");logRun(0)}},{k:"l1",t:"git log --oneline",ok:function(){return true},run:function(){$("term").innerHTML="";out("$ git log --oneline","c");logRun(1)}},
+  {k:"l2",t:"git log --oneline --graph",ok:function(){return true},run:function(){$("term").innerHTML="";out("$ git log --oneline --graph","c");logRun(2)}},{k:"l3",t:"git log --oneline --graph --all",ok:function(){return true},run:function(){$("term").innerHTML="";out("$ git log --oneline --graph --all","c");logRun(3)}}]},
+ side:function(){side("How to read it",function(s){para(s,"Each line is one commit. The short code is its ID, and the words are its message. An asterisk marks a commit, and the lines | and / draw the branches.");para(s,"HEAD -> main means you are standing on main. Faded commits in the picture are not shown, because they are not on your current branch.")})}},
+{tab:"2. Who changed this line?",name:"Line attribution: git blame",a:"A name tag on every line of the file, showing who changed it last.",rule:"Run git blame, then click any line. You will see the commit, the person and the time. Then git show opens that commit so you can see what changed.",
+ start:"Press Play, or click git blame app.py.",
+ init:function(){B={mode:0,range:null,sel:null}},auto:["bl",function(){selLine(4)},"sh"],
+ cmds:function(){return [{k:"bl",t:"git blame app.py",ok:function(){return true},run:function(){B.mode=1;B.range=null;B.sel=null;BL.forEach(function(l){out(bline(l),"o")});cap("Every line now shows the commit, the person and the time of its last change. Click a line.");SFX.reveal()}},
+  {k:"bll",t:"git blame -L 3,4 app.py",ok:function(){return true},run:function(){B.mode=1;B.range=[3,4];B.sel=null;BL.slice(2,4).forEach(function(l){out(bline(l),"o")});cap("The -L option limits blame to a range of lines. Here, only lines 3 and 4.");SFX.reveal()}},
+  {k:"sh",t:"git show "+(B.sel||"<commit>"),ok:function(){return !!B.sel},run:function(){var m=BM[B.sel];out("commit "+B.sel+"  Author: "+m.a,"o");out("    "+m.m,"o");m.d.forEach(function(x){out(x,x[0]==="+"?"":"e")});cap("git show displays what that commit changed. Red lines were removed, and green lines were added.");SFX.pick()}}]},
+ side:function(){side(B.sel?"Commit "+B.sel:"Good to know",function(s){if(!B.sel){para(s,"Blame shows who last changed a line. It doesn’t show who wrote the idea. Line 4 below has a bug, since tax should be added. Can you find who changed it?");return}
+  var m=BM[B.sel];para(s,m.a+", "+m.t+": “"+m.m+"”");var d=document.createElement("div");d.className="diff";m.d.forEach(function(x){var r=document.createElement("div");r.textContent=x;r.className=x[0]==="+"?"a":"d";d.appendChild(r)});s.appendChild(d)})}},
+{tab:"3. Unstage and discard",name:"Unstaging and discarding: git restore",a:"Three boxes: your desk, the outbox, and the filing cabinet.",rule:"Edits start on your desk (working folder). git add puts them in the outbox (staging). git commit files them in the cabinet. git restore --staged moves a file back from the outbox. git restore throws your edits away.",
+ start:"Choose a file, then click a command.",
+ init:function(){zinit()},auto:[function(){Z.sel=0;$("fsel").children[0].click()},"add","unst","disc"],
+ cmds:function(){var i=Z.sel,f=Z.f[i],n=FN[i];return [
+  {k:"edit",t:"Edit "+n+" (no git needed)",ok:function(){return f.st==="clean"},run:function(){f.st="mod";f.fx="";cap("You changed the file on your desk. Git can see the change, but nothing is saved yet.");SFX.commit()}},
+  {k:"add",t:"git add "+n,b:"safe",ok:function(){return f.st==="mod"},run:function(){f.st="stg";cap("git add moves the change to the staging area. It is now queued for the next commit.");SFX.sw()}},
+  {k:"unst",t:"git restore --staged "+n,b:"safe",ok:function(){return f.st==="stg"},run:function(){f.st="mod";cap("The file leaves the staging area. Your edits are still safe on your desk.");SFX.undo()}},
+  {k:"disc",t:"git restore "+n,b:"danger",ok:function(){return f.st==="mod"},run:function(){f.st="clean";f.fx="gone";cap("This throws your edits away and brings back the last saved version. Git never saved those edits, so this can’t be undone.");SFX.soft()}},
+  {k:"cm",t:"git commit -m \"update\"",ok:function(){return Z.f.some(function(x){return x.st==="stg"})},run:function(){Z.f.forEach(function(x,k){if(x.st==="stg"){x.st="clean";x.fx="";x.v++}});out("[main 7d2e9a1] update","o");cap("Everything in the staging area is saved as a new commit, and the saved version number goes up.");SFX.ok()}},
+  {k:"stt",t:"git status",b:"safe",ok:function(){return true},run:function(){zstatus().forEach(function(l){out(l,"o")});cap("git status tells you what is on your desk and what is in the outbox.",false)}}]},
+ side:function(){side("Old and new commands",function(s){para(s,"Older tutorials use git reset HEAD <file> to unstage and git checkout -- <file> to discard. git restore does the same jobs with clearer names.");para(s,"Careful: git restore <file> is the one that can’t be undone, because those edits were never saved in Git.")})}},
+{tab:"4. Undoing commits",name:"Undoing commits: revert, reset and reflog",a:"Revert writes a correction note. Reset tears out the page. Reflog is the security camera.",rule:"Revert adds a new commit that cancels an old one, so it is safe for shared work. Reset moves the branch back and rewrites history. Reflog remembers where HEAD has been, so lost commits can be found.",
+ start:"The last commit is a mistake. Try revert first, or step back with reset.",
+ init:function(){undoInit();clearSvg()},auto:["rev","hard","rl",function(){var g=S.cm.filter(function(c){return c.ghost}).pop();if(g)recoverTo(g.h)}],
+ cmds:function(){var t=tipC(),par=t.p.length>0;return [
+  {k:"rev",t:"git revert HEAD",b:"safe",ok:function(){return !hasGhost()&&par},run:function(){var R=addC("R",[t.id],t.x+1,0,{from:t,h:"8c4d",m:"Revert: "+t.m});S.br.main=R.id;S.rl.unshift({h:"8c4d",m:"revert: Revert “"+t.m+"”"});out("[main 8c4d] Revert \""+t.m+"\"","o");
+    cap("Revert adds a new commit that does the opposite of the last one. Nothing is erased, so it is safe, even for commits you already pushed.");SFX.ok()}},
+  {k:"soft",t:"git reset --soft HEAD~1",b:"careful",ok:function(){return par},run:function(){goBack("staged")}},
+  {k:"mixed",t:"git reset --mixed HEAD~1",b:"careful",ok:function(){return par},run:function(){goBack("working")}},
+  {k:"hard",t:"git reset --hard HEAD~1",b:"danger",ok:function(){return par},run:function(){goBack("gone")}},
+  {k:"rl",t:"git reflog",b:"safe",ok:function(){return true},run:function(){S.showRl=true;shortRl().forEach(function(l){out(l,"o")});cap("The reflog is a diary of everywhere HEAD has been. Even commits that look lost are listed here.");SFX.reveal()}}]},
+ side:function(){side("Where did the changes go?",function(s){var p=document.createElement("p");[["Staged","staged"],["Working folder","working"],["Gone","gone"]].forEach(function(x){var c=document.createElement("span");c.className="chip"+(S.chg===x[1]?(x[1]==="gone"?" red":" on"):"");c.textContent=x[0];p.appendChild(c)});s.appendChild(p);
+  if(S.warn){var w=document.createElement("div");w.className="warn";w.textContent="Warning: main is now behind origin/main. Those commits are already shared, so rewriting them would confuse teammates. Use revert for shared commits.";s.appendChild(w)}
+  if(S.showRl){var h=document.createElement("h3");h.textContent="Reflog";s.appendChild(h);S.rl.slice(0,7).forEach(function(e,i){var r=document.createElement("div");r.className="rl";var sp=document.createElement("span");sp.textContent=e.h+" HEAD@{"+i+"}: "+e.m;r.appendChild(sp);
+    var cm=byH(e.h);if(cm&&S.br.main!==cm.id){var b=document.createElement("button");b.textContent="Recover";b.onclick=function(){initAudio();out("$ git reset --hard "+e.h,"c");recoverTo(e.h)};r.appendChild(b)}s.appendChild(r)})}
+  else para(s,"Run git reflog to open the diary.")})}}];
+
+/* ---------- quiz ---------- */
+var QS=[
+{t:"Who wrote this line?",sit:"A line in app.py looks wrong. You want to know who changed it last, and when.",q:"Which command do you use?",o:[{t:"git blame app.py",p:10,fb:"Blame shows, for every line, the last commit that touched it, who made it and when."},{t:"git log --oneline --graph",p:5,fb:"It shows commits, but not which commit changed which line."},{t:"git restore app.py",p:0,fb:"That would throw away your edits to the file."},{t:"git reset --hard",p:0,fb:"That is a destructive undo. It doesn’t answer who wrote a line."}],why:"Use blame for lines, and git show to see the commit it points to.",code:"git blame app.py\ngit show c3d9"},
+{t:"See the shape",sit:"You want one quick picture of every branch and how they split and join.",q:"Which command is best?",o:[{t:"git log --oneline --graph --all",p:10,fb:"Oneline keeps it short, graph draws the branches, and all includes every branch."},{t:"git log",p:5,fb:"It works, but it is long and has no picture."},{t:"git status",p:0,fb:"Status describes your current changes, not the history."},{t:"git blame",p:0,fb:"Blame needs a file and shows lines, not branches."}],why:"The graph turns the diary into a map.",code:"git log --oneline --graph --all"},
+{t:"Wrong file staged",sit:"You ran git add on notes.txt by mistake. You still want to keep your edits, just not commit them yet.",q:"What do you run?",o:[{t:"git restore --staged notes.txt",p:10,fb:"It removes the file from the staging area and keeps your edits."},{t:"git reset notes.txt",p:5,fb:"The older way to do the same thing. It works, but restore has a clearer name."},{t:"git restore notes.txt",p:0,fb:"That throws away your edits. It doesn’t unstage anything."},{t:"git reset --hard",p:0,fb:"That discards everything. Far too strong."}],why:"Unstaging only moves the file back to your desk.",code:"git restore --staged notes.txt"},
+{t:"Start over on a file",sit:"You edited notes.txt and made a mess. You want the last committed version back, and you don’t need your edits.",q:"What do you run?",o:[{t:"git restore notes.txt",p:10,fb:"It brings back the last committed version. Be sure, because those edits can’t be recovered."},{t:"git stash",p:5,fb:"Safe if you might want the edits later, but you asked to throw them away."},{t:"git restore --staged notes.txt",p:0,fb:"That only unstages. Your messy edits would stay."},{t:"git revert HEAD",p:0,fb:"Revert undoes a commit, not edits in your folder."}],why:"Discarding is permanent, so check what you are throwing away.",code:"git restore notes.txt"},
+{t:"A shared mistake",sit:"The last commit is already pushed, and teammates have pulled it. It introduced a bug.",q:"What is the safest fix?",o:[{t:"git revert HEAD",p:10,fb:"It adds a new commit that cancels the bad one. Nobody’s history is rewritten."},{t:"Fix the bug in a new commit by hand.",p:5,fb:"A fine fix-forward approach. Revert is quicker when the whole commit is bad."},{t:"git reset --hard HEAD~1 and force push.",p:0,fb:"It rewrites shared history and breaks your teammates’ copies."},{t:"Ask everyone to clone the repository again.",p:0,fb:"A big disruption you can avoid completely."}],why:"For shared history, add a new commit. Don’t rewrite.",code:"git revert HEAD"},
+{t:"Too early",sit:"You committed too soon, and nothing is pushed yet. You want to undo the commit but keep the changes in your folder, not staged.",q:"What do you run?",o:[{t:"git reset --mixed HEAD~1",p:10,fb:"The branch steps back and the changes stay in your folder. Mixed is the default mode."},{t:"git reset --soft HEAD~1",p:5,fb:"Also steps back, but leaves the changes staged. Fine if you want to recommit at once."},{t:"git reset --hard HEAD~1",p:0,fb:"That throws the changes away."},{t:"git revert HEAD",p:0,fb:"That adds an undo commit instead of removing the commit."}],why:"Reset is fine for private commits you haven’t pushed.",code:"git reset --mixed HEAD~1"},
+{t:"I lost my work!",sit:"You ran git reset --hard and two commits vanished from the log. You need them back.",q:"What do you do?",o:[{t:"Find the old commit in git reflog, then git reset --hard to it.",p:10,fb:"The reflog remembers where HEAD has been, even for commits that aren’t on any branch."},{t:"git fsck --lost-found",p:5,fb:"A real tool that finds dangling commits, but reflog is the quick first step."},{t:"Rewrite the code from memory.",p:0,fb:"Hopefully unnecessary. The commits probably still exist."},{t:"git revert HEAD",p:0,fb:"That undoes the latest commit. It doesn’t bring lost commits back."}],why:"Commits are rarely deleted right away. The reflog keeps the trail.",code:"git reflog\ngit reset --hard e5a0"}];
+var qz={order:[],i:0,score:0,res:[],opts:[],ans:false};
+function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),x=a[i];a[i]=a[j];a[j]=x}return a}
+function startQuiz(){qz.order=shuf(QS.map(function(_,i){return i}));qz.i=0;qz.score=0;qz.res=[];renderQ()}
+function renderQ(){var n=QS.length;if(qz.i>=n)return fin();var q=QS[qz.order[qz.i]];qz.opts=shuf(q.o);qz.ans=false;
+ $("qprog").textContent="Scenario "+(qz.i+1)+" of "+n;$("qscore").textContent="Score: "+qz.score+" / "+n*10;$("qb").style.width=(qz.i/n*100)+"%";
+ $("qbody").innerHTML='<h3>'+q.t+'</h3><p>'+q.sit+'</p><p><b>'+q.q+'</b></p><div class="opts">'+qz.opts.map(function(o,k){return '<button class="opt" data-k="'+k+'">'+o.t+'</button>'}).join("")+'</div><div class="fbk" id="fbk" hidden></div>';
+ hush();say(q.sit+" "+q.q)}
+function ans(k){if(qz.ans)return;qz.ans=true;var q=QS[qz.order[qz.i]],o=qz.opts[k],p=o.p;qz.score+=p;qz.res.push({t:q.t,p:p});$("qscore").textContent="Score: "+qz.score+" / "+QS.length*10;
+ Array.prototype.forEach.call($("qbody").querySelectorAll(".opt"),function(b,j){var oo=qz.opts[j];b.disabled=true;b.classList.add(oo.p===10?"best":oo.p===5?"mid":"bad");if(j===k)b.classList.add("picked")});
+ var cls=p===10?"best":p===5?"mid":"bad",head=p===10?"Nicely done. +10":p===5?"Reasonable, though not the best fit. +5":"Not quite. +0",f=$("fbk");
+ f.className="fbk "+cls;f.hidden=false;f.innerHTML='<h4>'+head+'</h4><p>'+o.fb+'</p><p><b>The best move:</b> '+q.why+'</p><pre id="fcode" class="term" style="min-height:0"></pre><button class="go" id="qnext">'+(qz.i+1>=QS.length?"See my result":"Next scenario")+'</button>';
+ $("fcode").textContent=q.code;if(p===10)SFX.ok();else if(p===5){tone(440,.15);tone(523,.2,"sine",.03,.15)}else SFX.soft();hush();say(head+" "+o.fb+" "+q.why)}
+function fin(){var n=QS.length,max=n*10,s=qz.score,r=s>=max*.85?"Calm under pressure":s>=max*.55?"Getting there":"Keep practicing",
+ m=s>=max*.85?"You know which undo is safe and which one bites. That is exactly the instinct to have.":s>=max*.55?"Good instincts. Review the ones marked with a cross or a tilde, then try again.":"Revisit the topics above, then try again. It gets easier fast.";
+ $("qb").style.width="100%";$("qprog").textContent="Finished";$("qscore").textContent="Score: "+s+" / "+max;
+ $("qbody").innerHTML='<h3>'+r+': '+s+' / '+max+'</h3><p>'+m+'</p><ul>'+qz.res.map(function(x){return '<li>'+(x.p===10?"✓":x.p===5?"~":"✗")+" "+x.t+" ("+x.p+")</li>"}).join("")+'</ul><button class="go" id="qretry">Try again with a new order</button>';
+ if(s>=max*.55)SFX.ok();else SFX.soft();hush();say(r+". You scored "+s+" out of "+max+". "+m)}
+$("qbody").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;
+ if(b.classList.contains("opt")){initAudio();ans(+b.getAttribute("data-k"))}else if(b.id==="qnext"){qz.i++;renderQ()}else if(b.id==="qretry")startQuiz()});
+
+/* ---------- controls ---------- */
+T[0].pick=function(c){T0pick(c)};
+function reset(){runId++;hush();$("term").innerHTML="";T[tab].init();if(tab===0||tab===3)clearSvg();out("# A practice repository","o");cap(T[tab].start,false);redraw();refresh()}
+function show(i){runId++;hush();tab=i;var t=T[i];$("tName").textContent=t.name||"Challenge: choose the right move";$("tAnalogy").textContent=t.a;$("tRule").textContent=t.rule;
+ Array.prototype.forEach.call($("tabs").children,function(b,k){b.setAttribute("aria-pressed",k===i)});
+ var ch=i===4;$("lab").hidden=ch;$("quiz").hidden=!ch;$("bPlay").hidden=ch;$("boardW").hidden=!(i===0||i===3);$("blameW").hidden=i!==1;$("zonesW").hidden=i!==2;$("fsel").hidden=i!==2;
+ if(ch)startQuiz();else reset()}
+function play(){reset();initAudio();var id=runId,steps=T[tab].auto.slice();
+ function step(){if(id!==runId||!steps.length){$("bPlay").disabled=false;return}var s=steps.shift();
+  if(typeof s==="function"){s();redraw();refresh()}else{var c=T[tab].cmds().filter(function(x){return x.k===s})[0];if(c)exec(c)}
+  setTimeout(step,dur(lastCap)+500)}
+ $("bPlay").disabled=true;setTimeout(function(){if(id===runId)step()},500)}
+T.push({tab:"5. Challenge",a:"Real work doesn’t come with labels. You get a situation and choose a move.",rule:"Seven short scenarios. 10 points for the best move, 5 for reasonable, 0 for not recommended. Take your time."});
+T.forEach(function(t,i){var b=document.createElement("button");b.textContent=t.tab;b.onclick=function(){show(i)};$("tabs").appendChild(b)});
+$("bPlay").onclick=play;$("bReset").onclick=reset;
+$("bSound").onclick=function(){soundOn=!soundOn;this.setAttribute("aria-pressed",soundOn);this.textContent="Sound: "+(soundOn?"on":"off")};
+$("bVoice").onclick=function(){voiceOn=!voiceOn;this.setAttribute("aria-pressed",voiceOn);this.textContent="Voice: "+(voiceOn?"on":"off");if(!voiceOn)hush()};
+window.addEventListener("resize",function(){if(tab===2)renderZones()});
+if(window.speechSynthesis){chooseVoice();speechSynthesis.onvoiceschanged=chooseVoice;
+ $("vsel").onchange=function(){VX.auto=this.value==="";VX.voice=VX.auto?VX.list[0]||null:VX.list[+this.value];hush();say("Hello. This is how I will sound while I explain.")}}
+show(0);
+})();
+</script>
+</body>
+</html>

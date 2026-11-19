@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AWS decoupled architectures with SQS, SNS and EventBridge, explained by watching it work</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f3f5f7;--surface:#fff;--ink:#14212b;--mute:#5b6b78;--line:#d5dde3;--accent:#0b7a75;--a2:#3b6fd4;--a3:#c9741a;--a4:#8a5cc2;--bad:#c4452d;--good:#1f8a4c;--warn:#a86d00;--code:#eaf0f3;--okbg:rgba(31,138,76,.16);--badbg:rgba(196,69,45,.14);
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--a4:#b79cf0;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;--okbg:rgba(85,214,138,.2);--badbg:rgba(255,122,92,.18);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--a4:#b79cf0;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;--okbg:rgba(85,214,138,.2);--badbg:rgba(255,122,92,.18);color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:22px 16px 48px}
+h1{font-size:clamp(26px,4.6vw,40px);line-height:1.08;margin:0 0 10px;letter-spacing:-.02em}
+h2{margin:0 0 4px;font-size:24px;letter-spacing:-.01em}
+.lede{color:var(--mute);max-width:70ch;margin:0 0 16px}
+.tabs,.controls,.row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+button,select{font:inherit;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:8px 13px;border-radius:8px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700;padding:10px 20px}
+button.sm{padding:5px 10px;font-size:13px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+select#vsel{max-width:min(300px,100%)}
+.explain{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+.analogy{font-size:20px;line-height:1.35;margin:4px 0 8px;color:var(--accent);font-weight:700}
+.explain p{margin:0 0 6px}.kw{color:var(--mute);font-size:14px}
+.stage{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 18px;margin-bottom:12px}
+.sl{display:flex;flex-direction:column;font:500 13px "IBM Plex Mono",monospace;color:var(--mute)}.sl input{width:100%}
+.ck{font:500 13px "IBM Plex Mono",monospace;color:var(--mute);display:flex;gap:6px;align-items:center}
+.live{min-height:3.2em;margin:12px 0;padding:10px 14px;border-left:5px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.card h3{font-size:12px;margin:0 0 2px;color:var(--mute);font-weight:500}
+.big{font:500 24px "IBM Plex Mono",monospace}.ok{color:var(--good)}.no{color:var(--bad)}.wn{color:var(--warn)}
+.sub{font-size:12px;color:var(--mute)}
+.bd{position:relative;height:200px;border:1px dashed var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.nb{position:absolute;top:26px;width:26%;height:130px;border:2px solid var(--line);border-radius:10px;background:var(--bg);padding:8px;font:500 13px "IBM Plex Mono",monospace;text-align:center}
+.nb small{display:block;color:var(--mute);font-weight:400}
+.nb.off{opacity:.35;border-style:dashed}
+.fillb{position:absolute;left:8px;right:8px;bottom:8px;background:var(--accent);border-radius:4px;transition:height .2s;opacity:.85}
+.dt{position:absolute;width:10px;height:10px;border-radius:50%;transition:left .7s linear,top .7s ease,opacity .7s;z-index:3}
+.dt.ok{background:var(--accent)}.dt.bad{background:var(--bad)}.dt.out{background:var(--a2)}
+.qbox{display:flex;flex-wrap:wrap;gap:3px;min-height:60px;padding:8px;border:2px solid var(--line);border-radius:10px;background:var(--bg)}
+.cell{width:13px;height:13px;border-radius:3px}.cell.tl{background:var(--accent)}.cell.amb{background:var(--a3)}.cell.fl{outline:2px solid var(--ink)}
+.cell.g0{background:var(--accent)}.cell.g1{background:var(--a2)}.cell.g2{background:var(--a3)}.cell.g3{background:var(--a4)}.cell.rd{background:var(--bad)}
+.lanes{display:grid;grid-template-columns:2fr 3fr 1fr;gap:10px;margin-bottom:10px}
+@media (max-width:700px){.lanes{grid-template-columns:1fr}}
+.lane h4{margin:0 0 4px;font:500 12px "IBM Plex Mono",monospace;color:var(--mute)}
+.wk{border:1px solid var(--line);border-radius:8px;padding:4px 8px;margin-bottom:4px;font:400 12px "IBM Plex Mono",monospace;position:relative;overflow:hidden;background:var(--bg)}
+.wk i{position:absolute;left:0;bottom:0;height:3px;background:var(--good)}.wk.st{opacity:.5}
+.chart{width:100%;height:86px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+.sns{display:grid;grid-template-columns:1fr 1.2fr;gap:12px}
+@media (max-width:760px){.sns{grid-template-columns:1fr}}
+.sub1{border:2px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;background:var(--bg)}
+.sub1 b{font-size:15px}.sub1 .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:400 12px "IBM Plex Mono",monospace;color:var(--mute);margin:4px 0}
+.sub1.dn{border-color:var(--bad)}.sub1 .cnt{font:500 13px "IBM Plex Mono",monospace}
+.tag{display:inline-block;font:500 11px "IBM Plex Mono",monospace;border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--mute)}
+.pkt{position:absolute;width:12px;height:12px;border-radius:50%;transition:left .8s ease,top .8s ease,opacity .8s;z-index:3}
+.topic{position:relative;min-height:240px;border:1px dashed var(--line);border-radius:10px;background:var(--bg)}
+.eb{display:grid;grid-template-columns:1fr 1.3fr;gap:12px}
+@media (max-width:820px){.eb{grid-template-columns:1fr}}
+.json{background:var(--code);border-radius:8px;padding:10px 12px;font:400 12px/1.5 "IBM Plex Mono",monospace;white-space:pre-wrap;overflow-x:auto;margin:0 0 8px}
+.rule{border:2px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;background:var(--bg)}
+.rule.m{border-color:var(--good);background:var(--okbg)}.rule.n{opacity:.7}
+.rule .hd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.rule pre{margin:6px 0 4px;font:400 11px/1.4 "IBM Plex Mono",monospace;white-space:pre-wrap}
+.why{font:400 12px "IBM Plex Mono",monospace;color:var(--mute)}
+.reqs{display:grid;gap:6px;margin-bottom:12px}
+.rec{background:var(--okbg);border-left:5px solid var(--good);border-radius:0 8px 8px 0;padding:10px 14px}
+.rec li{margin:3px 0}
+.quiz{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.qtop{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;font:500 13px "IBM Plex Mono",monospace;color:var(--mute)}
+.qbar{height:6px;background:var(--line);border-radius:3px;margin-bottom:12px;overflow:hidden}
+.qbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s linear}
+.quiz h3{margin:0 0 6px;font-size:22px}
+.opts{display:grid;gap:8px;margin-top:10px}
+.opt{text-align:left;padding:10px 14px;background:var(--bg)}.opt:disabled{opacity:1;cursor:default}
+.opt.best{border-color:var(--good);background:var(--okbg)}.opt.mid{border-color:var(--warn);background:rgba(168,109,0,.16)}.opt.bad{border-color:var(--bad);background:var(--badbg)}.opt.picked{outline:3px solid var(--ink)}
+.fbk{margin-top:14px;padding:12px 14px;border-radius:8px;background:var(--bg);border-left:5px solid var(--accent)}
+.fbk.best{border-left-color:var(--good)}.fbk.mid{border-left-color:var(--warn)}.fbk.bad{border-left-color:var(--bad)}
+.fbk h4{margin:0 0 4px;font-size:18px}.fbk p{margin:0 0 8px}.quiz ul{padding-left:20px}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:18px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:500;white-space:nowrap}
+code{font-family:"IBM Plex Mono",monospace;font-size:.92em}
+.cap{font-size:13px;color:var(--mute);margin-top:10px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.dt,.pkt,.fillb{transition:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Decoupled architectures on AWS: SQS, SNS and EventBridge</h1>
+<p class="lede">Loosely coupled means one part can slow down, fail or scale without taking the others with it. Here you can experiment: move the sliders, break things on purpose and watch the numbers change. A soft voice explains what is happening. Press <b>Play story</b> for a guided tour of any tab.</p>
+
+<div class="tabs" id="tabs" role="group" aria-label="Topic"></div>
+<section class="explain" aria-live="polite">
+  <h2 id="tName"></h2>
+  <p class="analogy" id="tAnalogy"></p>
+  <p id="tRule"></p>
+  <p class="kw" id="tKw"></p>
+</section>
+
+<div class="controls" id="ctrls">
+  <button class="go" id="bPlay">Play story</button>
+  <button id="bPause" aria-pressed="false">Pause</button>
+  <button id="bSpeed">Speed: 1x</button>
+  <button id="bReset">Reset</button>
+  <button id="bExplain">Explain this</button>
+  <button id="bSound" aria-pressed="true">Sound: on</button>
+  <button id="bVoice" aria-pressed="true">Voice: on</button>
+  <select id="vsel" aria-label="Voice choice"></select>
+</div>
+
+<div class="stage" id="stage"></div>
+<div class="live" id="cap" aria-live="polite"></div>
+
+<div class="tw"><table>
+<tr><th>Service</th><th>Model</th><th>Remember for the exam</th></tr>
+<tr><td><b>SQS Standard</b></td><td>Queue. Consumers pull. Each message is handled by one consumer.</td><td>At-least-once delivery, best-effort ordering, nearly unlimited throughput. Visibility timeout (default 30 s, up to 12 h). Retention default 4 days, up to 14. Long polling up to 20 s. Dead-letter queue. Delay up to 15 min.</td></tr>
+<tr><td><b>SQS FIFO</b></td><td>Queue with strict order inside a message group.</td><td>Exactly-once processing, message group ID, deduplication (5-minute window), name ends in .fifo. Lower throughput than Standard.</td></tr>
+<tr><td><b>SNS</b></td><td>Pub/sub topic. SNS pushes a copy to every subscriber.</td><td>Fan-out. Subscribers: SQS, Lambda, HTTP/S, email, SMS, mobile push. Filter policies. No storage, so put an SQS queue behind it for durability. FIFO topics exist.</td></tr>
+<tr><td><b>EventBridge</b></td><td>Event bus with rules that match patterns and route to targets.</td><td>AWS service events, SaaS partner events, custom events, schedules. Content-based filtering. Up to 5 targets per rule. Archive and replay. Schema registry.</td></tr>
+</table></div>
+<p class="cap">Teaching simulations: the numbers are small and made up so you can see the effects. Check AWS’s current documentation for exact limits, because quotas change. SQS message size is 256 KB (AWS has been raising it, so verify), and larger payloads normally go to S3 with a pointer in the message. Voice uses your browser’s built-in speech, and sound starts after your first click.</p>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var soundOn=true,voiceOn=true,AC=null,tab=0,runId=0,sim={speed:1,paused:false,eng:null},said={};
+
+/* ---------- audio: soft and quiet ---------- */
+function tone(f,d,ty,g,t0){if(!AC||!soundOn)return;var o=AC.createOscillator(),a=AC.createGain(),t=AC.currentTime+(t0||0);o.type=ty||"sine";o.frequency.value=f;a.gain.setValueAtTime(g||.03,t);a.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(a);a.connect(AC.destination);o.start(t);o.stop(t+d+.02)}
+function initAudio(){if(!soundOn)return;if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==="suspended")AC.resume()}
+var SFX={tick:function(){tone(520,.07,"sine",.025)},send:function(){tone(440,.1);tone(587,.12,"sine",.025,.08)},ok:function(){[523,659,784].forEach(function(f,i){tone(f,.28,"sine",.033,i*.1)})},soft:function(){tone(220,.3,"triangle",.035);tone(208,.3,"triangle",.03,.05)},up:function(){tone(392,.12);tone(523,.16,"sine",.03,.1)},dup:function(){tone(330,.12,"triangle",.035);tone(330,.12,"triangle",.035,.14)}};
+
+/* ---------- voice: gentle, Google US English first ---------- */
+var VX={voice:null,list:[],auto:true};
+function vScore(v){var n=v.name,s=0;if(!/^en/i.test(v.lang))return -999;s+=10;if(/en[-_]US/i.test(v.lang))s+=3;if(/^Google US English$/i.test(n))s+=200;
+ if(/natural|neural|online/i.test(n))s+=60;if(/premium|enhanced|siri/i.test(n))s+=40;
+ if(/aria|jenny|michelle|ava\b|emma|sonia|libby|clara|nancy|jane|sara|zira|samantha|allison|susan|karen|moira|serena|tessa|fiona|victoria|zoe|joanna|salli|kendra|kimberly|female/i.test(n))s+=25;
+ if(/david|mark|guy|daniel|alex\b|fred|ryan|george|james|thomas|oliver|\bmale\b|rishi|aaron|arthur|gordon|ralph|junior|albert|eddy|reed|rocko|sandy|shelley|grandma|grandpa|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|hysterical/i.test(n))s-=60;
+ if(/compact|espeak/i.test(n))s-=30;return s}
+function chooseVoice(){if(!window.speechSynthesis)return;var all=speechSynthesis.getVoices()||[];
+ VX.list=all.filter(function(v){return vScore(v)>-100}).sort(function(a,b){return vScore(b)-vScore(a)});if(VX.auto||!VX.voice)VX.voice=VX.list[0]||null;
+ $("vsel").innerHTML='<option value="">Auto: best available female voice</option>'+VX.list.map(function(v,i){return '<option value="'+i+'">'+v.name+' ('+v.lang+')</option>'}).join("")}
+var PRON=[[/--/g,"dash dash "],[/\bSQS\b/g,"S Q S"],[/\bSNS\b/g,"S N S"],[/\bDLQ\b/g,"dead letter queue"],[/\bFIFO\b/g,"fifo"],[/\bAWS\b/g,"A W S"],[/\bEC2\b/g,"E C two"],[/\bS3\b/g,"S three"],[/\bSaaS\b/g,"sass"],[/\bAPI\b/g,"A P I"],[/\bHTTPS?\b/g,"H T T P"],[/\bID\b/g,"I D"],[/[→▸]/g," to "],[/_/g," "]];
+function speakable(t){PRON.forEach(function(p){t=t.replace(p[0],p[1])});return t}
+function say(t){if(!voiceOn||!window.speechSynthesis||!t)return;
+ try{var parts=speakable(t).match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[t],out=[];
+  parts.forEach(function(p){p=p.trim();if(!p)return;if(out.length&&out[out.length-1].length<28)out[out.length-1]+=" "+p;else out.push(p)});
+  out.forEach(function(p){var u=new SpeechSynthesisUtterance(p);if(VX.voice){u.voice=VX.voice;u.lang=VX.voice.lang}else u.lang="en-US";u.rate=.92;u.pitch=1;u.volume=.85;speechSynthesis.speak(u)})}catch(e){}}
+function hush(){try{window.speechSynthesis&&speechSynthesis.cancel()}catch(e){}}
+function cap(t,speak){$("cap").textContent=t;if(speak!==false){hush();say(t)}}
+function nar(k,t){if(said[k])return;said[k]=1;cap(t)}
+function dur(t){return Math.max(2600,voiceOn?t.split(" ").length*380:0)}
+
+/* ---------- helpers ---------- */
+function slider(id,label,min,max,val,step,unit){return '<label class="sl"><span>'+label+': <b id="v_'+id+'">'+val+'</b>'+(unit||"")+'</span><input type="range" id="s_'+id+'" min="'+min+'" max="'+max+'" value="'+val+'" step="'+(step||1)+'"></label>'}
+function chk(id,label,on){return '<label class="ck"><input type="checkbox" id="c_'+id+'"'+(on?" checked":"")+'> '+label+'</label>'}
+function bindS(P,ids,cb){ids.forEach(function(id){var s=$("s_"+id);s.oninput=function(){P[id]=+s.value;$("v_"+id).textContent=s.value;cb&&cb(id)}})}
+function bindC(P,ids,cb){ids.forEach(function(id){var c=$("c_"+id);c.onchange=function(){P[id]=c.checked;cb&&cb(id)}})}
+function setS(P,id,v){P[id]=v;var s=$("s_"+id);if(s){s.value=v;$("v_"+id).textContent=v}}
+function setC(P,id,v){P[id]=v;var c=$("c_"+id);if(c)c.checked=v}
+function card(id,h){return '<div class="card"><h3>'+h+'</h3><div class="big" id="'+id+'">0</div><div class="sub" id="'+id+'s"></div></div>'}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function seq(steps){var id=runId,i=0;$("bPlay").disabled=true;(function next(){if(id!==runId||i>=steps.length){$("bPlay").disabled=false;return}var s=steps[i++];s[0]();setTimeout(next,s[1])})()}
+
+/* ---------- engine A: tight vs loose ---------- */
+var EA={mount:function(){var P=this.P={rate:4,q:false,down:false},CAP=6;this.CAP=CAP;this.S={carry:0,cc:0,back:0,ok:0,fail:0,done:0,spike:0};
+ $("stage").innerHTML='<div class="ctl">'+slider("rate","Orders arriving per second",0,20,4)+chk("q","Put a queue between web tier and order service")+chk("down","Order service is down")+'</div><div class="row"><button class="sm" id="spk">Traffic spike for 10 s</button><span class="kw">The order service can handle '+CAP+' orders per second.</span></div>'+
+  '<div class="bd" id="ab"><div class="nb" style="left:2%">Web tier<small>takes the order</small></div><div class="nb" id="qb2" style="left:37%">Queue<small id="qn">backlog 0</small><i class="fillb" id="qf" style="height:0"></i></div><div class="nb" id="svc" style="left:72%">Order service<small>'+CAP+' per second</small></div></div>'+
+  '<div class="grid">'+card("a1","Customers who saw an error")+card("a2","Orders safely accepted")+card("a3","Backlog waiting")+card("a4","Time to catch up")+'</div>';
+ var me=this;bindS(P,["rate"]);bindC(P,["q","down"],function(k){me.mode(k)});$("spk").onclick=function(){initAudio();me.spike()};this.mode()},
+ mode:function(k){var P=this.P;$("qb2").classList.toggle("off",!P.q);$("svc").style.borderColor=P.down?"var(--bad)":"var(--line)";
+  if(k==="q")cap(P.q?"A queue now sits between the two. The web tier only has to hand the order to the queue.":"Without a queue, the web tier calls the order service directly and waits for it.");
+  if(k==="down")cap(P.down?"The order service just went down.":"The order service is back.")},
+ spike:function(){var me=this,P=this.P;setS(P,"rate",16);cap("A traffic spike: sixteen orders per second, but the order service can only handle six.");setTimeout(function(){setS(P,"rate",4)},10000)},
+ dot:function(x1,x2,c){var b=$("ab");if(!b)return;var d=document.createElement("i");d.className="dt "+c;d.style.left=x1+"%";d.style.top=(50+Math.random()*80)+"px";b.appendChild(d);d.getBoundingClientRect();d.style.left=x2+"%";if(c==="bad"){d.style.top="190px";d.style.opacity=0}setTimeout(function(){d.remove()},900)},
+ tick:function(dt){var P=this.P,S=this.S,CAP=this.CAP;S.carry+=P.rate*dt;var k=Math.floor(S.carry);S.carry-=k;S.cc+=CAP*dt;var c=Math.floor(S.cc);S.cc-=c;if(P.down)c=0;
+  if(!P.q){var ok=Math.min(k,c),bad=k-ok;S.ok+=ok;S.fail+=bad;S.done+=ok;for(var i=0;i<Math.min(ok,2);i++)this.dot(28,72,"ok");for(i=0;i<Math.min(bad,2);i++)this.dot(28,60,"bad");
+   if(bad>0)nar("f","Orders are failing. The web tier called the order service directly, and the order service couldn’t keep up. Customers see errors, and those orders are lost.");}
+  else{S.back+=k;S.ok+=k;var p=Math.min(S.back,c);S.back-=p;S.done+=p;for(i=0;i<Math.min(k,2);i++)this.dot(28,37,"ok");for(i=0;i<Math.min(p,2);i++)this.dot(63,72,"out");
+   if(S.back>30)nar("b","The queue is absorbing the spike. Orders wait safely in line, and the order service keeps working at its own pace.");
+   if(P.down&&S.back>10)nar("d","The order service is down, but customers still get a success message. The queue just keeps the orders until the service returns.");
+   if(S.back===0&&S.said2&&!P.down)nar("r","The backlog is cleared. Nothing was lost.");if(S.back>0)S.said2=1}},
+ render:function(){var P=this.P,S=this.S,CAP=this.CAP;$("a1").textContent=S.fail;$("a1").className="big "+(S.fail?"no":"");$("a1s").textContent=P.q?"Errors only if the queue itself is full":"The web tier waits on the order service";
+  $("a2").textContent=S.ok;$("a2s").textContent="Orders the customer was told succeeded";$("a3").textContent=Math.round(S.back);$("qn").textContent="backlog "+Math.round(S.back);$("qf").style.height=Math.min(100,S.back/2)+"px";
+  var t=S.back<1?"–":P.down?"waiting for service":(CAP>P.rate?Math.ceil(S.back/(CAP-P.rate))+" s":"never: add capacity");$("a4").textContent=t},
+ auto:function(){var P=this.P,me=this;seq([[function(){me.reset();cap("A normal day. Four orders per second arrive, and the order service handles six. Everything works.")},6000],[function(){setS(P,"rate",16);cap("Now a sale starts. Sixteen orders per second, with no queue. Watch the errors climb.")},9000],[function(){setC(P,"q",true);me.mode("q");setS(P,"rate",16)},8000],[function(){setC(P,"down",true);me.mode("down")},7000],[function(){setC(P,"down",false);setS(P,"rate",4);me.mode("down");cap("The service recovers and the traffic calms down. The backlog drains, and no order was lost.")},10000]])},
+ reset:function(){this.mount()}};
+
+/* ---------- engine B: SQS lab ---------- */
+var EB={mount:function(){var P=this.P={rate:3,workers:3,proc:1,vt:10,poison:0,maxrc:3,fifo:false,groups:2,auto:false};
+ this.S={t:0,carry:0,id:0,q:[],w:[],dlq:[],done:0,dups:0,latSum:0,latN:0,tp:[],hist:[],lastH:0,lastAS:0,said:{}};for(var i=0;i<P.workers;i++)this.addW(0);
+ $("stage").innerHTML='<div class="ctl">'+slider("rate","Messages arriving per second",0,20,3)+slider("workers","Workers (consumers)",0,10,3)+slider("proc","Seconds to process one message",.5,10,1,.5)+slider("vt","Visibility timeout (seconds)",1,30,10)+slider("poison","Poison messages (always fail)",0,30,0,1,"%")+slider("maxrc","Max receives before dead-letter queue",1,5,3)+slider("groups","FIFO message groups",1,4,2)+'</div>'+
+  '<div class="row">'+chk("fifo","FIFO queue (strict order per group)")+chk("auto","Auto Scaling on backlog")+'</div><div class="row"><button class="sm" id="p1">Traffic spike</button><button class="sm" id="p2">Kill all workers</button><button class="sm" id="p3">Slow worker (duplicates)</button><button class="sm" id="p4">Poison messages</button></div>'+
+  '<div class="lanes"><div class="lane"><h4>Workers</h4><div id="wks"></div></div><div class="lane"><h4>Queue <span id="qtype">Standard</span> (teal waiting, amber in flight)</h4><div class="qbox" id="qb3"></div><div class="sub" id="nxt"></div></div><div class="lane"><h4>Dead-letter queue</h4><div class="qbox" id="dq"></div></div></div>'+
+  '<div class="grid">'+card("b1","Waiting (visible)")+card("b2","In flight (hidden)")+card("b3","Dead-letter queue")+card("b4","Processed")+card("b5","Duplicates")+card("b6","Oldest wait")+'</div>'+
+  '<svg class="chart" id="ch" viewBox="0 0 300 80" preserveAspectRatio="none" role="img" aria-label="Queue depth and worker count over time"></svg><div class="sub">Line: messages in the queue. Dashed: number of workers.</div>';
+ var me=this;bindS(P,["rate","workers","proc","vt","poison","maxrc","groups"],function(k){if(k==="workers")me.setW(P.workers)});bindC(P,["fifo","auto"],function(k){$("qtype").textContent=P.fifo?"FIFO":"Standard";$("s_groups").parentNode.hidden=!P.fifo;$("s_workers").disabled=P.auto;if(k==="auto"&&P.auto)cap("Auto Scaling is on. It watches the backlog per worker and adds or removes workers for you.")});
+ $("s_groups").parentNode.hidden=true;$("p1").onclick=function(){initAudio();me.spike()};$("p2").onclick=function(){initAudio();me.kill()};$("p3").onclick=function(){initAudio();me.slow()};$("p4").onclick=function(){initAudio();me.pois()}},
+ addW:function(delay){var S=this.S;S.w.push({msg:null,ready:S.t+delay,end:0,start:0})},
+ setW:function(n){var S=this.S;while(S.w.length<n)this.addW(0);while(S.w.length>n){var i=-1;S.w.forEach(function(w,k){if(!w.msg)i=k});S.w.splice(i>=0?i:S.w.length-1,1)}},
+ spike:function(){var P=this.P;setS(P,"rate",14);cap("A traffic spike: fourteen messages per second. Producers now outrun the workers, so the queue grows, and nothing is lost.");var me=this;setTimeout(function(){setS(P,"rate",3)},12000)},
+ kill:function(){var P=this.P,S=this.S;S.w=[];setS(P,"workers",0);setC(P,"auto",false);cap("Every worker just crashed. Messages in flight stay hidden until the visibility timeout ends, then they return to the queue. Nothing is lost, and new workers will pick them up.")},
+ slow:function(){var P=this.P;setS(P,"proc",8);setS(P,"vt",4);setS(P,"rate",2);cap("Processing takes eight seconds, but the visibility timeout is only four. The message reappears while the first worker is still busy, so a second worker takes it too. Duplicates.")},
+ pois:function(){var P=this.P;setS(P,"poison",15);setS(P,"maxrc",3);setS(P,"vt",3);cap("Fifteen percent of messages are poison and always fail. Each one is retried, and after three receives it moves to the dead-letter queue.")},
+ vis:function(){return this.S.q.filter(function(m){return m.st==="vis"})},
+ pick:function(){var S=this.S,P=this.P,v=this.vis(),i;
+  while(v.length){var m;if(P.fifo){var busy={};S.q.forEach(function(x){if(x.st==="fly")busy[x.g]=1});var c=v.filter(function(x){return !busy[x.g]});if(!c.length)return null;m=c[0]}else{var n=Math.min(6,v.length);m=v[Math.floor(Math.random()*n)]}
+   if(m.rc>=P.maxrc){m.st="dlq";S.dlq.push(m);S.q=S.q.filter(function(x){return x!==m});v=this.vis();nar("dlq","A message failed three times, so SQS moved it to the dead-letter queue. Now you can inspect it without blocking the rest.");continue}return m}return null},
+ tick:function(dt){var P=this.P,S=this.S;S.t+=dt;S.carry+=P.rate*dt;var k=Math.floor(S.carry);S.carry-=k;
+  for(var i=0;i<k&&S.q.length<400;i++){S.id++;S.q.push({id:S.id,g:P.fifo?S.id%P.groups:0,st:"vis",rc:0,t0:S.t,poison:Math.random()*100<P.poison,until:0,done:false})}
+  S.q.forEach(function(m){if(m.st==="fly"&&S.t>=m.until)m.st="vis"});
+  if(P.auto&&S.t-S.lastAS>=1){S.lastAS=S.t;var vis=this.vis().length,des=clamp(Math.ceil(vis/6),1,10),n=S.w.length;
+   if(des>n){for(var j=n;j<des;j++)this.addW(3);setS(P,"workers",des);nar("as","Auto Scaling sees the backlog and launches more workers. They take a few seconds to start.")}
+   else if(des<n){var ix=-1;S.w.forEach(function(w,q){if(!w.msg)ix=q});if(ix>=0){S.w.splice(ix,1);setS(P,"workers",S.w.length)}}}
+  var me=this;S.w.forEach(function(w){if(w.msg&&S.t>=w.end){var m=w.msg;w.msg=null;if(!m.poison){if(m.done){S.dups++;SFX.dup();nar("dup","A duplicate. The same message was processed twice, because the visibility timeout was shorter than the processing time. SQS Standard delivers at least once, so consumers should be idempotent.")}else{m.done=true;m.st="done";S.done++;S.latSum+=S.t-m.t0;S.latN++;S.tp.push(S.t)}}}});
+  S.w.forEach(function(w){if(!w.msg&&w.ready<=S.t){var m=me.pick();if(m){m.rc++;m.st="fly";m.until=S.t+P.vt;w.msg=m;w.start=S.t;w.end=S.t+P.proc}}});
+  S.q=S.q.filter(function(m){return !(m.done&&!S.w.some(function(w){return w.msg===m}))});S.tp=S.tp.filter(function(t){return S.t-t<5});
+  var vn=this.vis().length;if(vn>25)nar("g","The backlog is growing. Producers are faster than consumers. The queue protects the workers by holding the extra messages.");
+  if(P.workers===0&&vn>5)nar("z","There are no workers, but the messages are safe in the queue. This is loose coupling: the producers don’t care.");
+  if(S.t-S.lastH>=.5){S.lastH=S.t;S.hist.push([S.q.length,S.w.length]);if(S.hist.length>120)S.hist.shift()}},
+ render:function(){var P=this.P,S=this.S,v=0,f=0;S.q.forEach(function(m){if(m.st==="vis")v++;else if(m.st==="fly")f++});
+  var cells="";S.q.slice(0,110).forEach(function(m){cells+='<i class="cell '+(P.fifo?"g"+m.g:(m.st==="fly"?"amb":"tl"))+(m.st==="fly"?" fl":"")+'"></i>'});if(S.q.length>110)cells+='<span class="sub">+'+(S.q.length-110)+' more</span>';$("qb3").innerHTML=cells;
+  var nx=this.vis().slice(0,10).map(function(m){return "#"+m.id}).join(" ");$("nxt").textContent=nx?"Next up: "+nx:"Queue is empty";
+  var w="";S.w.forEach(function(x,i){var st=x.ready>S.t;w+='<div class="wk'+(st?" st":"")+'">Worker '+(i+1)+": "+(st?"starting…":x.msg?"#"+x.msg.id+(x.msg.poison?" (poison)":""):"idle")+(x.msg?'<i style="width:'+clamp((S.t-x.start)/(x.end-x.start)*100,0,100)+'%"></i>':"")+'</div>'});$("wks").innerHTML=w||'<div class="sub">No workers</div>';
+  var d="";S.dlq.slice(-40).forEach(function(){d+='<i class="cell rd"></i>'});$("dq").innerHTML=d||'<span class="sub">empty</span>';
+  $("b1").textContent=v;$("b1s").textContent="ApproximateNumberOfMessagesVisible";$("b2").textContent=f;$("b2s").textContent="…NotVisible";$("b3").textContent=S.dlq.length;$("b3").className="big "+(S.dlq.length?"no":"");$("b4").textContent=S.done;$("b4s").textContent=(S.tp.length/5).toFixed(1)+" per second";
+  $("b5").textContent=S.dups;$("b5").className="big "+(S.dups?"wn":"");$("b5s").textContent="At-least-once delivery";var old=0;S.q.forEach(function(m){if(m.st==="vis")old=Math.max(old,S.t-m.t0)});$("b6").textContent=old.toFixed(0)+" s";$("b6s").textContent=S.latN?"Average total wait "+(S.latSum/S.latN).toFixed(1)+" s":"";
+  var h=S.hist,mx=Math.max(10,Math.max.apply(null,h.map(function(x){return x[0]})),12),a="",b="";h.forEach(function(x,i){var X=i*300/119;a+=X+","+(78-x[0]/mx*74)+" ";b+=X+","+(78-x[1]/12*74)+" "});
+  $("ch").innerHTML='<polyline fill="none" stroke="var(--accent)" stroke-width="2" points="'+a+'"/><polyline fill="none" stroke="var(--a3)" stroke-width="2" stroke-dasharray="4 3" points="'+b+'"/>'},
+ auto:function(){var P=this.P,me=this;seq([[function(){me.reset();cap("A balanced start. Three messages per second arrive, and three workers each handle one per second.")},6500],[function(){me.spike()},10000],[function(){setC(P,"auto",true);$("s_workers").disabled=true;cap("Now turn on Auto Scaling. It scales the workers on the backlog per worker, which is the metric AWS recommends for SQS consumers.")},12000],[function(){setS(P,"rate",3);cap("The spike is over. The backlog drains, and Auto Scaling removes workers you no longer need.")},9000],[function(){setC(P,"auto",false);$("s_workers").disabled=false;me.pois()},14000],[function(){me.slow()},15000]])},
+ reset:function(){this.mount()}};
+
+/* ---------- engine C: SNS fan-out ---------- */
+var EC={mount:function(){var me=this;this.S={subs:[{n:"Email service",t:"sqs",f:"all",up:true,on:true,d:0,w:0,l:0},{n:"Inventory service",t:"sqs",f:"order",up:true,on:true,d:0,w:0,l:0},{n:"Analytics",t:"lambda",f:"all",up:true,on:true,d:0,w:0,l:0},{n:"Partner webhook",t:"http",f:"refund",up:true,on:true,d:0,w:0,l:0}],pub:0};
+ var h='<div class="row"><button class="go sm" id="po">Publish an order</button><button class="go sm" id="pr">Publish a refund</button><button class="sm" id="pm">Publish 10 mixed</button><span class="kw">One publish, many copies.</span></div><div class="sns"><div id="subs"></div><div class="topic" id="tp"><div style="position:absolute;left:10px;top:10px" class="tag">Publisher</div><div style="position:absolute;left:36%;top:96px;border:2px solid var(--accent);border-radius:12px;padding:8px 12px;background:var(--surface)"><b>SNS topic</b><div class="sub">order-events</div></div></div></div>';
+ $("stage").innerHTML=h;$("po").onclick=function(){initAudio();me.pub("order")};$("pr").onclick=function(){initAudio();me.pub("refund")};$("pm").onclick=function(){initAudio();for(var i=0;i<10;i++)(function(i){setTimeout(function(){me.pub(i%3===2?"refund":"order")},i*250)})(i)};this.draw()},
+ draw:function(){var me=this,S=this.S,h="";S.subs.forEach(function(s,i){var ty={sqs:"SQS queue",lambda:"Lambda function",http:"HTTPS endpoint"}[s.t];
+  h+='<div class="sub1'+(s.up?"":" dn")+'"><b>'+s.n+'</b> <span class="tag">'+ty+'</span><div class="meta"><label class="ck"><input type="checkbox" data-i="'+i+'" data-k="on"'+(s.on?" checked":"")+'> subscribed</label><label class="ck"><input type="checkbox" data-i="'+i+'" data-k="up"'+(s.up?" checked":"")+'> up</label><label class="ck">filter <select data-i="'+i+'" data-k="f"><option value="all"'+(s.f==="all"?" selected":"")+'>none (all)</option><option value="order"'+(s.f==="order"?" selected":"")+'>type = order</option><option value="refund"'+(s.f==="refund"?" selected":"")+'>type = refund</option></select></label></div>'+
+  '<div class="cnt">delivered '+s.d+(s.t==="sqs"?' · waiting in queue <span class="'+(s.w?"wn":"")+'">'+s.w+'</span>':"")+' · <span class="'+(s.l?"no":"")+'">lost '+s.l+'</span></div></div>'});
+ $("subs").innerHTML=h;Array.prototype.forEach.call($("subs").querySelectorAll("[data-k]"),function(e){e.onchange=function(){var s=S.subs[+e.getAttribute("data-i")],k=e.getAttribute("data-k");if(k==="f")s.f=e.value;else s[k]=e.checked;
+  if(k==="up"){if(!s.up)cap(s.n+" is down."+(s.t==="sqs"?" Its messages will wait safely in the queue.":" This is a plain endpoint, so it has nowhere to wait."));else cap(s.n+" is back up.")}if(k==="f")cap("Filter policy set. SNS now only delivers matching messages to this subscriber, so it doesn’t have to throw the rest away itself.");me.draw()}})},
+ pub:function(type){var S=this.S,tp=$("tp");S.pub++;SFX.send();if(!tp)return;var col=type==="order"?"var(--accent)":"var(--a3)",me=this;
+  cap(type==="order"?"An order was published. SNS pushes a copy to every subscriber whose filter matches.":"A refund was published. Only subscribers that accept refunds get a copy.");
+  S.subs.forEach(function(s,i){if(!s.on)return;var ok=s.f==="all"||s.f===type;if(!ok)return;var p=document.createElement("i");p.className="pkt";p.style.background=col;p.style.left="40%";p.style.top="110px";tp.appendChild(p);p.getBoundingClientRect();p.style.left="2%";p.style.top=(10+i*60)+"px";p.style.opacity=.2;setTimeout(function(){p.remove()},900);
+   setTimeout(function(){if(s.up){s.d++}else if(s.t==="sqs"){s.w++;nar("w","The email queue is down, but SNS still delivered the message into its SQS queue. It waits there until the service is back. That is why SNS plus SQS is the classic fan-out pattern.")}else{s.l++;nar("l","The webhook is down. SNS retries for a while, but a plain endpoint can’t hold messages, so they can be lost unless you add a dead-letter queue to the subscription.")}me.draw()},600)})},
+ tick:function(dt){var S=this.S,ch=false;S.subs.forEach(function(s){if(s.t==="sqs"&&s.up&&s.w>0){var n=Math.min(s.w,Math.ceil(3*dt));s.w-=n;s.d+=n;ch=true}});if(ch){this.draw();nar("dr","The queue is draining the messages it was holding.")}},render:function(){},
+ auto:function(){var me=this,S=this.S;seq([[function(){me.pub("order")},5500],[function(){me.pub("refund")},6000],[function(){S.subs[0].up=false;me.draw();cap("Now the email service goes down.")},4000],[function(){S.subs[3].up=false;me.draw();me.pub("refund")},4500],[function(){me.pub("order")},6000],[function(){S.subs[0].up=true;me.draw()},7000]])},reset:function(){this.mount()}};
+
+/* ---------- engine D: EventBridge ---------- */
+var EV={mount:function(){var me=this;this.P={amt:250,arch:true};this.S={rules:[
+ {n:"High-value orders",t:["Lambda: fraud-check","SQS: fulfillment"],on:true,c:0,pat:function(P){return {source:["app.orders"],"detail-type":["OrderPlaced"],detail:{amount:[{numeric:[">=",100]}]}}}},
+ {n:"Audit every order",t:["SNS: order-audit"],on:true,c:0,pat:function(){return {source:["app.orders"]}}},
+ {n:"EC2 stopped",t:["Lambda: notify-ops"],on:true,c:0,pat:function(){return {source:["aws.ec2"],"detail-type":["EC2 Instance State-change Notification"],detail:{state:["stopped"]}}}},
+ {n:"Urgent support tickets",t:["SQS: support-queue"],on:true,c:0,pat:function(){return {source:["aws.partner/zendesk"],detail:{priority:["high"]}}}},
+ {n:"Nightly report (schedule)",t:["Step Functions: report"],on:true,c:0,sched:true,pat:function(){return {source:["aws.events"]}}}],arc:[],last:null,res:null};
+ $("stage").innerHTML='<div class="ctl">'+slider("amt","Order amount",10,500,250,10," dollars")+chk("arch","Archive events (so they can be replayed)",true)+'</div><div class="row"><button class="go sm" data-e="order">Order placed</button><button class="sm" data-e="cancel">Order cancelled</button><button class="sm" data-e="ec2stop">EC2 stopped</button><button class="sm" data-e="ec2run">EC2 running</button><button class="sm" data-e="ticket">Zendesk ticket (high)</button><button class="sm" data-e="sched">Schedule fires (2 AM)</button><button class="sm" id="rpl">Replay archive</button></div>'+
+  '<div class="eb"><div><div class="sub">Last event on the bus</div><pre class="json" id="evj">Send an event to begin.</pre><div class="sub" id="arc"></div></div><div id="rules"></div></div>';
+ bindS(this.P,["amt"],function(){me.draw()});bindC(this.P,["arch"]);Array.prototype.forEach.call($("stage").querySelectorAll("[data-e]"),function(b){b.onclick=function(){initAudio();me.send(b.getAttribute("data-e"))}});$("rpl").onclick=function(){initAudio();me.replay()};this.draw()},
+ mk:function(k){var a=this.P.amt;return {order:{source:"app.orders","detail-type":"OrderPlaced",detail:{orderId:1001,amount:a}},cancel:{source:"app.orders","detail-type":"OrderCancelled",detail:{orderId:1001}},ec2stop:{source:"aws.ec2","detail-type":"EC2 Instance State-change Notification",detail:{state:"stopped","instance-id":"i-0abc"}},ec2run:{source:"aws.ec2","detail-type":"EC2 Instance State-change Notification",detail:{state:"running","instance-id":"i-0abc"}},ticket:{source:"aws.partner/zendesk","detail-type":"Ticket Created",detail:{priority:"high"}},sched:{source:"aws.events","detail-type":"Scheduled Event",detail:{}}}[k]},
+ match:function(pat,ev,path){var why="";for(var k in pat){var pv=pat[k],ev2=ev?ev[k]:undefined,p=(path?path+".":"")+k;
+  if(Array.isArray(pv)){var ok=false;pv.forEach(function(c){if(c&&typeof c==="object"&&c.numeric){var op=c.numeric[0],n=c.numeric[1];if(typeof ev2==="number"&&(op===">="?ev2>=n:op===">"?ev2>n:op==="<"?ev2<n:ev2<=n))ok=true}else if(c===ev2)ok=true});if(!ok)return [false,p+" is "+(ev2===undefined?"missing":JSON.stringify(ev2))+", which doesn’t match"]}
+  else{var r=this.match(pv,ev2&&typeof ev2==="object"?ev2:{},p);if(!r[0])return r}}return [true,""]},
+ send:function(k,silent){var S=this.S,ev=this.mk(k),me=this,N=0;S.last=ev;if(this.P.arch&&!silent){S.arc.push(k==="order"?JSON.parse(JSON.stringify(ev)):ev);if(S.arc.length>8)S.arc.shift()}
+  S.res=S.rules.map(function(r){var pat=r.pat(me.P);if(r.n==="High-value orders")pat.detail.amount[0].numeric[1]=100;var m=r.on?(r.sched&&k!=="sched"?[false,"not a schedule trigger"]:me.match(pat,ev)):[false,"rule disabled"];if(m[0]){r.c++;N++}return m});
+  SFX.send();this.draw();var names=S.rules.filter(function(r,i){return S.res[i][0]}).map(function(r){return r.n});
+  if(!silent)cap(names.length?"The event matched "+names.length+" rule"+(names.length>1?"s":"")+": "+names.join(", ")+". EventBridge sends it to those targets, and the sender knows nothing about them.":"The event matched no rule, so nothing happens. Publishing is free of side effects until a rule says otherwise.")},
+ replay:function(){var S=this.S,me=this;if(!S.arc.length){cap("The archive is empty. Send some events with archiving turned on.");return}cap("Replaying "+S.arc.length+" archived events through the bus. Targets will run again, so they should be idempotent.");
+  var a=S.arc.slice();a.forEach(function(ev,i){setTimeout(function(){S.last=ev;S.res=S.rules.map(function(r){var pat=r.pat(me.P),m=r.on?(r.sched&&ev.source!=="aws.events"?[false,""]:me.match(pat,ev)):[false,"rule disabled"];if(m[0])r.c++;return m});SFX.tick();me.draw()},i*500)})},
+ draw:function(){var S=this.S,me=this,h="";$("evj").textContent=S.last?JSON.stringify(S.last,null,1):"Send an event to begin.";$("arc").textContent="Archive: "+S.arc.length+" event"+(S.arc.length===1?"":"s");
+  S.rules.forEach(function(r,i){var m=S.res?S.res[i]:null,pat=r.pat(me.P);if(r.n==="High-value orders")pat.detail.amount[0].numeric[1]=100;
+   h+='<div class="rule'+(m?(m[0]?" m":" n"):"")+'"><div class="hd"><b>'+r.n+'</b><label class="ck"><input type="checkbox" data-r="'+i+'"'+(r.on?" checked":"")+'> on</label></div>'+(r.sched?'<div class="why">cron(0 2 * * ? *)</div>':'<pre>'+JSON.stringify(pat)+'</pre>')+'<div>'+r.t.map(function(t){return '<span class="tag">'+t+'</span>'}).join(" ")+' <span class="tag">invoked '+r.c+'×</span></div>'+(m?'<div class="why">'+(m[0]?"MATCH: targets invoked":"No match: "+m[1])+'</div>':"")+'</div>'});
+  $("rules").innerHTML=h;Array.prototype.forEach.call($("rules").querySelectorAll("[data-r]"),function(c){c.onchange=function(){S.rules[+c.getAttribute("data-r")].on=c.checked;me.draw()}})},
+ tick:function(){},render:function(){},
+ auto:function(){var me=this,P=this.P;seq([[function(){setS(P,"amt",50);me.send("order")},6500],[function(){setS(P,"amt",400);me.send("order")},7000],[function(){me.send("ec2stop")},6000],[function(){me.send("ticket")},6000],[function(){me.send("sched")},6000],[function(){me.replay()},9000]])},reset:function(){this.mount()}};
+
+/* ---------- chooser ---------- */
+var REQ=[["Several different services each need a copy of the same message","SNS","Fan-out is what SNS is for. Put one SQS queue behind each consumer so each can work at its own pace."],
+["One service must process each message once, at its own pace","SQS","That is a work queue. Consumers pull, and each message goes to one of them."],
+["A slow database must be protected from traffic spikes","SQS","A queue buffers the spike so the database sees a steady load."],
+["Messages must be processed in strict order","FIFO","Use SQS FIFO with a message group ID. Order is kept within each group."],
+["Failed messages must be retried, and poison messages set aside","DLQ","Use a dead-letter queue with a max receive count."],
+["React to AWS service events such as an EC2 state change","EB","AWS services publish events to EventBridge automatically. Add a rule and a target."],
+["Receive events from a SaaS partner such as Zendesk","EB","Partner event sources deliver straight to an EventBridge partner event bus."],
+["Route events by their content, such as amount over 100","EB","EventBridge rules match patterns on the event body, with numeric and prefix matching."],
+["Run something on a schedule","EB","Use EventBridge Scheduler or a scheduled rule instead of a server running cron."],
+["Replay past events later","EB","EventBridge can archive events and replay them. For ordered streams you can also look at Kinesis."],
+["Send email, SMS or mobile push notifications","SNS","SNS delivers to email, SMS and mobile push as well as to queues and functions."]];
+var EX={mount:function(){var h='<p class="kw">Tick the requirements you have. The recommendation updates as you go.</p><div class="reqs">';REQ.forEach(function(r,i){h+=chk("r"+i,r[0])});$("stage").innerHTML=h+'</div><div class="rec" id="rec"></div>';
+ var me=this;REQ.forEach(function(r,i){$("c_r"+i).onchange=function(){me.calc()}});this.calc()},
+ calc:function(){var on=[],sv={};REQ.forEach(function(r,i){if($("c_r"+i).checked){on.push(r);sv[r[1]]=1}});var h="";
+  if(!on.length){$("rec").innerHTML="Pick at least one requirement.";return}
+  h+="<b>Your design</b><ul>";var parts=[];if(sv.SNS&&(sv.SQS||sv.DLQ||sv.FIFO))parts.push("An SNS topic fanning out to one SQS queue per consumer (add FIFO or a dead-letter queue if you ticked those)");else{if(sv.SNS)parts.push("An SNS topic");if(sv.SQS||sv.FIFO||sv.DLQ)parts.push("An SQS queue"+(sv.FIFO?" (FIFO)":"")+(sv.DLQ?" with a dead-letter queue":""))}
+  if(sv.EB)parts.push("EventBridge rules routing events to the right targets"+(sv.SQS?", with an SQS queue as one target for buffering":""));parts.forEach(function(p){h+="<li>"+p+"</li>"});h+="</ul><b>Why</b><ul>";on.forEach(function(r){h+="<li>"+r[2]+"</li>"});h+="</ul>";$("rec").innerHTML=h;
+  cap(parts.join(". ")+".",false)},tick:function(){},render:function(){},reset:function(){this.mount()}};
+
+/* ---------- quiz ---------- */
+var QS=[
+{t:"Flash sale",sit:"During a flash sale, the web tier calls the order service directly. The order service is overwhelmed and orders are being lost.",q:"What is the best fix?",o:[{t:"Put an SQS queue between the tiers and scale the order workers on queue backlog.",p:10,fb:"The queue absorbs the spike and the workers scale to match, so no order is lost."},{t:"Move the order service to a larger instance.",p:5,fb:"It helps for a while, but the tiers stay tightly coupled and the spike can still overwhelm it."},{t:"Publish orders to an SNS topic with an HTTPS endpoint.",p:0,fb:"SNS has no storage for a plain endpoint, so an overloaded service can still lose messages."},{t:"Increase the load balancer idle timeout.",p:0,fb:"That makes customers wait longer. It doesn’t add capacity or buffering."}],why:"Decouple with a queue, then scale the consumers."},
+{t:"One upload, three jobs",sit:"Each photo uploaded must trigger three independent actions: thumbnails, metadata extraction and a notification. Each must be reliable on its own.",q:"Which design fits?",o:[{t:"An SNS topic with three SQS queues subscribed, one per action.",p:10,fb:"Classic fan-out. Every queue gets its own copy, and each consumer works at its own pace."},{t:"Send S3 events straight to three Lambda functions.",p:5,fb:"It can work, but it is less decoupled and has no per-consumer buffering."},{t:"One SQS queue with three consumers.",p:0,fb:"Each message goes to only one consumer, so two actions would be skipped."},{t:"An EventBridge schedule every minute.",p:0,fb:"A schedule polls for work instead of reacting to uploads."}],why:"Fan-out means SNS in front, SQS behind."},
+{t:"Payments in order",sit:"Payment messages must be processed in order for each customer, and never twice.",q:"What do you choose?",o:[{t:"An SQS FIFO queue with the customer ID as the message group ID.",p:10,fb:"FIFO keeps order within a group and gives exactly-once processing."},{t:"An SQS Standard queue with duplicate checks in code.",p:5,fb:"Standard queues are at-least-once and best-effort ordering, so you would carry the burden yourself."},{t:"An SNS Standard topic.",p:0,fb:"It doesn’t guarantee ordering or exactly-once delivery."},{t:"An EventBridge rule per customer.",p:0,fb:"Rules route events. They don’t provide ordered processing."}],why:"Ordering and exactly-once are the FIFO clues."},
+{t:"EC2 stopped",sit:"A Lambda function must run whenever an EC2 instance changes to the stopped state.",q:"How do you trigger it?",o:[{t:"An EventBridge rule on the EC2 state-change event, targeting Lambda.",p:10,fb:"AWS services publish events to EventBridge automatically. No polling needed."},{t:"A scheduled Lambda that polls DescribeInstances every minute.",p:5,fb:"It works but wastes calls and reacts late."},{t:"An SQS queue that the instance writes to.",p:0,fb:"You would have to build that publisher yourself."},{t:"An SNS topic you publish to by hand.",p:0,fb:"Manual and unreliable."}],why:"Reacting to AWS service events points to EventBridge."},
+{t:"The stuck message",sit:"A few malformed messages fail again and again, and they keep returning to the queue, wasting worker time.",q:"What helps most?",o:[{t:"Configure a dead-letter queue with a max receive count.",p:10,fb:"After the limit, the message moves aside so you can inspect it, and the rest keep flowing."},{t:"Add an alarm on queue depth only.",p:5,fb:"Useful for visibility, but it doesn’t remove the poison messages."},{t:"Set the visibility timeout to zero.",p:0,fb:"That makes failed messages reappear instantly."},{t:"Increase retention to 14 days.",p:0,fb:"That keeps bad messages around longer."}],why:"Poison messages go to a dead-letter queue."},
+{t:"Processed twice",sit:"A Lambda function takes up to 60 seconds per SQS message, and some messages are processed twice. The visibility timeout is the default 30 seconds.",q:"What is the fix?",o:[{t:"Raise the visibility timeout well above the function timeout. AWS suggests at least six times.",p:10,fb:"The message stays hidden while the function runs, so no second consumer sees it."},{t:"Switch the queue to FIFO.",p:5,fb:"FIFO helps with duplicates in other ways, but the timeout mismatch still causes retries."},{t:"Turn on long polling.",p:0,fb:"Long polling reduces empty receives. It doesn’t fix this."},{t:"Shorten the retention period.",p:0,fb:"Retention is how long messages live, not how long they stay hidden."}],why:"Visibility timeout must exceed processing time."},
+{t:"SaaS events",sit:"Events from a SaaS partner must be routed by content: amounts over 1000 go to Step Functions, the rest to a queue.",q:"Which service?",o:[{t:"EventBridge partner event bus with content-based rules.",p:10,fb:"It receives partner events natively and routes on the event body."},{t:"SNS with a filter policy.",p:5,fb:"Filtering is possible, but there is no native partner integration and the patterns are less rich."},{t:"A single SQS queue.",p:0,fb:"A queue doesn’t route by content."},{t:"Kinesis Data Streams.",p:0,fb:"That is for ordered streams, not rule-based routing."}],why:"SaaS plus content routing points to EventBridge."},
+{t:"Empty receives",sit:"Consumers poll an SQS queue constantly and most calls return nothing. Costs are high and responses are slow to arrive.",q:"What do you change?",o:[{t:"Enable long polling, with a wait time up to 20 seconds.",p:10,fb:"The call waits for a message, which cuts empty responses and cost."},{t:"Use short polling.",p:0,fb:"That is the default behaviour causing the problem."},{t:"Shorten the visibility timeout.",p:0,fb:"It doesn’t affect empty receives."},{t:"Convert to FIFO.",p:0,fb:"FIFO doesn’t change polling cost."}],why:"Long polling saves money and reduces empty receives."},
+{t:"Scaling consumers",sit:"A fleet of EC2 workers reads from an SQS queue. You want the fleet to grow and shrink with the work.",q:"What do you do?",o:[{t:"Auto Scaling with a target on backlog per instance, using queue length divided by instance count.",p:10,fb:"It tracks the real workload, which is the number of waiting messages per worker."},{t:"Scale on CPU only.",p:5,fb:"CPU is a weaker signal. Workers can be idle on CPU while the queue is full."},{t:"A scheduled scaling action at fixed times.",p:0,fb:"It ignores the real load."},{t:"A fixed fleet sized for the peak.",p:0,fb:"It wastes money off-peak."}],why:"Scale consumers on queue depth."}];
+var qz={order:[],i:0,score:0,res:[],opts:[],ans:false};
+function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),x=a[i];a[i]=a[j];a[j]=x}return a}
+var EQ={mount:function(){$("stage").innerHTML='<div class="quiz"><div class="qtop"><span id="qprog"></span><span id="qscore"></span></div><div class="qbar"><i id="qb"></i></div><div id="qbody" aria-live="polite"></div></div>';
+ $("qbody").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;if(b.classList.contains("opt")){initAudio();ans(+b.getAttribute("data-k"))}else if(b.id==="qnext"){qz.i++;renderQ()}else if(b.id==="qretry")EQ.mount()});
+ qz.order=shuf(QS.map(function(_,i){return i}));qz.i=0;qz.score=0;qz.res=[];renderQ()},tick:function(){},render:function(){},reset:function(){this.mount()}};
+function renderQ(){var n=QS.length;if(qz.i>=n)return fin();var q=QS[qz.order[qz.i]];qz.opts=shuf(q.o);qz.ans=false;
+ $("qprog").textContent="Scenario "+(qz.i+1)+" of "+n;$("qscore").textContent="Score: "+qz.score+" / "+n*10;$("qb").style.width=(qz.i/n*100)+"%";
+ $("qbody").innerHTML='<h3>'+q.t+'</h3><p>'+q.sit+'</p><p><b>'+q.q+'</b></p><div class="opts">'+qz.opts.map(function(o,k){return '<button class="opt" data-k="'+k+'">'+o.t+'</button>'}).join("")+'</div><div class="fbk" id="fbk" hidden></div>';hush();say(q.sit+" "+q.q)}
+function ans(k){if(qz.ans)return;qz.ans=true;var q=QS[qz.order[qz.i]],o=qz.opts[k],p=o.p;qz.score+=p;qz.res.push({t:q.t,p:p});$("qscore").textContent="Score: "+qz.score+" / "+QS.length*10;
+ Array.prototype.forEach.call($("qbody").querySelectorAll(".opt"),function(b,j){var oo=qz.opts[j];b.disabled=true;b.classList.add(oo.p===10?"best":oo.p===5?"mid":"bad");if(j===k)b.classList.add("picked")});
+ var cls=p===10?"best":p===5?"mid":"bad",head=p===10?"Correct. +10":p===5?"Workable, but not the best answer. +5":"Not this one. +0",f=$("fbk");
+ f.className="fbk "+cls;f.hidden=false;f.innerHTML='<h4>'+head+'</h4><p>'+o.fb+'</p><p><b>Exam clue:</b> '+q.why+'</p><button class="go" id="qnext">'+(qz.i+1>=QS.length?"See my result":"Next scenario")+'</button>';
+ if(p===10)SFX.ok();else if(p===5){tone(440,.15);tone(523,.2,"sine",.03,.15)}else SFX.soft();hush();say(head+" "+o.fb+" "+q.why)}
+function fin(){var n=QS.length,max=n*10,s=qz.score,r=s>=max*.85?"Exam ready":s>=max*.55?"Getting there":"Keep practicing",m=s>=max*.85?"You can spot the clue words and pick the right service. That is the skill the exam rewards.":s>=max*.55?"Good instincts. Review the ones marked with a cross or a tilde, then try again.":"Revisit the labs above, then try again.";
+ $("qb").style.width="100%";$("qprog").textContent="Finished";$("qscore").textContent="Score: "+s+" / "+max;
+ $("qbody").innerHTML='<h3>'+r+': '+s+' / '+max+'</h3><p>'+m+'</p><ul>'+qz.res.map(function(x){return '<li>'+(x.p===10?"✓":x.p===5?"~":"✗")+" "+x.t+" ("+x.p+")</li>"}).join("")+'</ul><button class="go" id="qretry">Try again with a new order</button>';
+ if(s>=max*.55)SFX.ok();else SFX.soft();hush();say(r+". You scored "+s+" out of "+max+". "+m)}
+
+/* ---------- tabs ---------- */
+var T=[
+{tab:"1. Why decouple",e:EA,name:"Why decouple? Tight versus loose coupling",a:"A restaurant where the waiter hands the order to the kitchen on a spike, versus one that clips it to a rail and carries on.",rule:"Tightly coupled parts call each other directly and fail together. A queue in the middle lets each side scale, slow down or crash on its own. Try the spike and the crash with and without the queue.",kw:"Exam clue: “decouple”, “absorb spikes”, “no lost orders” all point to a queue."},
+{tab:"2. SQS queues",e:EB,name:"Amazon SQS: the durable buffer",a:"A ticket rail in a kitchen. Orders wait on the rail, and each cook takes one ticket at a time.",rule:"Producers send messages. Consumers pull them, process them and delete them. While a message is being worked on it is hidden for the visibility timeout. If it isn’t deleted in time it comes back, and after too many failures it goes to a dead-letter queue.",kw:"Exam clues: visibility timeout, long polling, dead-letter queue, FIFO for ordering, scale workers on queue depth."},
+{tab:"3. SNS fan-out",e:EC,name:"Amazon SNS: one message, many listeners",a:"A town crier. One announcement, and everyone subscribed hears it.",rule:"A publisher sends once to a topic, and SNS pushes a copy to every subscriber. Filter policies let each subscriber take only what it needs. SNS doesn’t store messages, so put an SQS queue behind each important subscriber.",kw:"Exam clues: fan-out, publish/subscribe, notifications, SNS plus SQS."},
+{tab:"4. EventBridge",e:EV,name:"Amazon EventBridge: the smart event router",a:"A mail room that reads each envelope and sends it to the right desks, based on what is inside.",rule:"Events arrive on an event bus from AWS services, SaaS partners or your own apps. Rules match patterns on the event content and route to up to five targets each. You can also schedule rules and archive and replay events.",kw:"Exam clues: AWS service events, SaaS partners, content-based routing, schedule, replay."},
+{tab:"5. Which one?",e:EX,name:"Choosing the right service",a:"Same toolbox, different jobs. Match the requirement to the tool.",rule:"Queue to buffer and work, topic to fan out, bus to route and react. Real systems combine them, such as EventBridge to SNS to several SQS queues.",kw:"Tip: read the requirement words in the exam question first."},
+{tab:"6. Exam practice",e:EQ,name:"Exam practice: pick the right design",a:"Real scenarios, the way the exam asks them.",rule:"Nine short scenarios. 10 points for the best answer, 5 for workable, 0 otherwise. Notice the clue words in each one."}];
+function show(i){runId++;hush();said={};tab=i;var t=T[i];if(sim.eng&&sim.eng.stop)sim.eng.stop();sim.eng=t.e;$("tName").textContent=t.name;$("tAnalogy").textContent=t.a;$("tRule").textContent=t.rule;$("tKw").textContent=t.kw||"";
+ Array.prototype.forEach.call($("tabs").children,function(b,k){b.setAttribute("aria-pressed",k===i)});$("bPlay").hidden=!t.e.auto;$("bPause").hidden=$("bSpeed").hidden=(i>3);$("bPlay").disabled=false;
+ t.e.mount();cap(i===5?"Choose an answer for each scenario.":i===4?"Tick the requirements you have.":"Move a slider or press a button. Or press Play story to watch a guided tour.",false)}
+T.forEach(function(t,i){var b=document.createElement("button");b.textContent=t.tab;b.onclick=function(){show(i)};$("tabs").appendChild(b)});
+setInterval(function(){if(sim.paused||!sim.eng||tab>3)return;for(var k=0;k<sim.speed;k++)sim.eng.tick(.2);sim.eng.render()},200);
+$("bPlay").onclick=function(){initAudio();runId++;said={};sim.eng.reset();var id=runId;setTimeout(function(){if(id===runId)sim.eng.auto()},50)};
+$("bReset").onclick=function(){runId++;hush();said={};sim.eng.reset();$("bPlay").disabled=false;cap("Reset.",false)};
+$("bExplain").onclick=function(){initAudio();var t=T[tab];cap(t.a+" "+t.rule)};
+$("bPause").onclick=function(){sim.paused=!sim.paused;this.setAttribute("aria-pressed",sim.paused);this.textContent=sim.paused?"Resume":"Pause"};
+$("bSpeed").onclick=function(){sim.speed=sim.speed===1?2:sim.speed===2?4:1;this.textContent="Speed: "+sim.speed+"x"};
+$("bSound").onclick=function(){soundOn=!soundOn;this.setAttribute("aria-pressed",soundOn);this.textContent="Sound: "+(soundOn?"on":"off")};
+$("bVoice").onclick=function(){voiceOn=!voiceOn;this.setAttribute("aria-pressed",voiceOn);this.textContent="Voice: "+(voiceOn?"on":"off");if(!voiceOn)hush()};
+if(window.speechSynthesis){chooseVoice();speechSynthesis.onvoiceschanged=chooseVoice;$("vsel").onchange=function(){VX.auto=this.value==="";VX.voice=VX.auto?VX.list[0]||null:VX.list[+this.value];hush();say("Hello. This is how I will sound while I explain.")}}
+show(0);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Git branching, merging and rebasing, explained by watching it work</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f3f5f7;--surface:#fff;--ink:#14212b;--mute:#5b6b78;--line:#d5dde3;--accent:#0b7a75;--a2:#3b6fd4;--a3:#c9741a;--bad:#c4452d;--good:#1f8a4c;--warn:#a86d00;--code:#eaf0f3;--mine:rgba(31,138,76,.18);--theirs:rgba(59,111,212,.18);
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;--mine:rgba(85,214,138,.2);--theirs:rgba(127,166,240,.22);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;--mine:rgba(85,214,138,.2);--theirs:rgba(127,166,240,.22);color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:22px 16px 48px}
+h1{font-size:clamp(26px,4.6vw,42px);line-height:1.08;margin:0 0 10px;letter-spacing:-.02em}
+h2{margin:0 0 4px;font-size:24px;letter-spacing:-.01em}
+.lede{color:var(--mute);max-width:68ch;margin:0 0 16px}
+.tabs,.controls,.cmds{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+button,select{font:inherit;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:8px 13px;border-radius:8px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700;padding:10px 20px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+select#vsel{max-width:min(300px,100%)}
+.explain{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+.analogy{font-size:20px;line-height:1.35;margin:4px 0 8px;color:var(--accent);font-weight:700}
+.explain p{margin:0 0 6px}
+.board{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px;overflow-x:auto}
+#svg{display:block;width:100%;height:auto;min-width:420px}
+.cm{transition:transform .6s ease,opacity .5s ease}
+.cm.pick{cursor:pointer}
+.cm .ci{font:700 14px "IBM Plex Mono",monospace}
+.cm .ch{font:400 10px "IBM Plex Mono",monospace;fill:var(--mute)}
+.cm .cx{font:400 10px "Bricolage Grotesque",sans-serif;fill:var(--mute)}
+.lb text{font:500 12px "IBM Plex Mono",monospace}
+.lb{transition:transform .6s ease}
+button.cmd{font:500 13px "IBM Plex Mono",monospace}
+.cmds{margin:12px 0 4px}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.seg button{border:0;border-radius:0}
+.live{min-height:3.2em;margin:10px 0;padding:10px 14px;border-left:5px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.term{background:var(--code);border-radius:8px;padding:12px;font:400 13px/1.5 "IBM Plex Mono",monospace;min-height:150px;max-height:260px;overflow:auto;white-space:pre-wrap}
+.term .c{color:var(--accent);font-weight:500}.term .e{color:var(--bad)}.term .o{color:var(--mute)}
+.side{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.side h3{margin:0 0 6px;font-size:16px}
+.file{background:var(--code);border-radius:8px;padding:8px 0;font:400 13px/1.7 "IBM Plex Mono",monospace;margin:6px 0 10px}
+.file div{padding:0 12px;white-space:pre-wrap}
+.file .mk{color:var(--mute)}.file .mine{background:var(--mine)}.file .theirs{background:var(--theirs)}
+.res{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.res input{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);min-width:150px}
+.chip{display:inline-block;font:500 11px "IBM Plex Mono",monospace;border-radius:999px;padding:2px 9px;border:1px solid var(--line);color:var(--mute)}
+.quiz{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.qtop{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;font:500 13px "IBM Plex Mono",monospace;color:var(--mute)}
+.qbar{height:6px;background:var(--line);border-radius:3px;margin-bottom:12px;overflow:hidden}
+.qbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s linear}
+.quiz h3{margin:0 0 6px;font-size:22px}
+.opts{display:grid;gap:8px;margin-top:10px}
+.opt{text-align:left;padding:10px 14px;background:var(--bg)}
+.opt:disabled{opacity:1;cursor:default}
+.opt.best{border-color:var(--good);background:var(--mine)}
+.opt.mid{border-color:var(--warn);background:rgba(168,109,0,.16)}
+.opt.bad{border-color:var(--bad);background:rgba(196,69,45,.12)}
+.opt.picked{outline:3px solid var(--ink)}
+.fbk{margin-top:14px;padding:12px 14px;border-radius:8px;background:var(--bg);border-left:5px solid var(--accent)}
+.fbk.best{border-left-color:var(--good)}.fbk.mid{border-left-color:var(--warn)}.fbk.bad{border-left-color:var(--bad)}
+.fbk h4{margin:0 0 4px;font-size:18px}.fbk p{margin:0 0 8px}
+.quiz ul{padding-left:20px}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:18px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:500;white-space:nowrap}
+code{font-family:"IBM Plex Mono",monospace;font-size:.92em}
+.cap{font-size:13px;color:var(--mute);margin-top:10px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.cm,.lb{transition:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Git branching, merging and rebasing, explained by watching it work</h1>
+<p class="lede">Git keeps your work as a chain of snapshots called commits. These pages show that chain as a picture. Pick a topic, press <b>Play</b> to watch it happen, or click the commands yourself. A soft voice and gentle sounds explain each step.</p>
+
+<div class="tabs" id="tabs" role="group" aria-label="Topic"></div>
+
+<section class="explain" aria-live="polite">
+  <h2 id="tName"></h2>
+  <p class="analogy" id="tAnalogy"></p>
+  <p id="tRule"></p>
+</section>
+
+<div class="controls">
+  <button class="go" id="bPlay">Play</button>
+  <button id="bReset">Reset</button>
+  <button id="bSound" aria-pressed="true">Sound: on</button>
+  <button id="bVoice" aria-pressed="true">Voice: on</button>
+  <select id="vsel" aria-label="Voice choice"></select>
+</div>
+
+<div id="lab">
+  <div class="seg" id="scen" role="group" aria-label="Scenario" hidden>
+    <button id="cA" aria-pressed="true">Case A: main didn’t move</button><button id="cB" aria-pressed="false">Case B: both branches moved</button>
+  </div>
+  <div class="board"><svg id="svg" viewBox="0 0 560 260" role="img" aria-label="Commit graph"></svg></div>
+  <div class="cmds" id="cmds"></div>
+  <div class="live" id="cap" aria-live="polite"></div>
+  <div class="two">
+    <div class="term" id="term" aria-label="Terminal"></div>
+    <div class="side" id="side"></div>
+  </div>
+</div>
+
+<div id="quiz" hidden>
+  <div class="quiz">
+    <div class="qtop"><span id="qprog"></span><span id="qscore"></span></div>
+    <div class="qbar"><i id="qb"></i></div>
+    <div id="qbody" aria-live="polite"></div>
+  </div>
+</div>
+
+<div class="tw"><table>
+<tr><th>Command</th><th>What it does</th><th>Use it when</th><th>Be careful</th></tr>
+<tr><td><code>git switch &lt;branch&gt;</code><br><code>git checkout &lt;branch&gt;</code></td><td>Moves HEAD to another branch</td><td>You want to work on a different branch</td><td>switch only switches. checkout has other jobs too.</td></tr>
+<tr><td><code>git merge</code></td><td>Joins another branch into yours</td><td>A feature is finished. Safe on shared branches.</td><td>Conflicts need a human decision</td></tr>
+<tr><td><code>git rebase</code></td><td>Replays your commits on top of another branch</td><td>Tidying your own private branch</td><td>Rewrites history. Don’t rebase shared commits.</td></tr>
+<tr><td><code>git cherry-pick</code></td><td>Copies one commit onto your branch</td><td>One fix must move without the rest</td><td>The copy gets a new ID</td></tr>
+<tr><td>Fixing a conflict</td><td>Edit, <code>git add</code>, then <code>git commit</code></td><td>Git says CONFLICT during a merge</td><td>Stuck? <code>git merge --abort</code> goes back</td></tr>
+</table></div>
+<p class="cap">The commits and IDs here are made up for learning. <code>git switch</code> needs Git 2.23 or newer. Voice uses your browser’s built-in speech, and sound starts after your first click.</p>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var NS="http://www.w3.org/2000/svg",svg=$("svg"),COLS=["var(--accent)","var(--a2)","var(--a3)"],LANE={main:0,feature:1,hotfix:2},BC={main:0,feature:1,hotfix:2};
+var S={},els={},gE,gN,gL,hn=0,tab=0,mcase=0,runId=0,soundOn=true,voiceOn=true,alt=false,AC=null,lastCap="";
+
+/* ---------- audio: soft and quiet ---------- */
+function tone(f,d,ty,g,t0){if(!AC||!soundOn)return;var o=AC.createOscillator(),a=AC.createGain(),t=AC.currentTime+(t0||0);o.type=ty||"sine";o.frequency.value=f;a.gain.setValueAtTime(g||.03,t);a.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(a);a.connect(AC.destination);o.start(t);o.stop(t+d+.02)}
+function initAudio(){if(!soundOn)return;if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==="suspended")AC.resume()}
+var SFX={commit:function(){tone(520,.1,"sine",.035)},branch:function(){tone(392,.12);tone(523,.16,"sine",.03,.1)},sw:function(){tone(330,.12);tone(294,.14,"sine",.03,.09)},
+ merge:function(){[262,330,392].forEach(function(f,i){tone(f,.45,"sine",.028,i*.03)})},rebase:function(){[392,440,494].forEach(function(f,i){tone(f,.14,"sine",.03,i*.1)})},
+ pick:function(){tone(700,.09,"triangle",.035)},soft:function(){tone(220,.3,"triangle",.035);tone(208,.3,"triangle",.03,.05)},ok:function(){[523,659,784].forEach(function(f,i){tone(f,.28,"sine",.033,i*.1)})}};
+
+/* ---------- voice: gentle, Google US English first ---------- */
+var VX={voice:null,list:[],auto:true};
+function vScore(v){var n=v.name,s=0;if(!/^en/i.test(v.lang))return -999;s+=10;if(/en[-_]US/i.test(v.lang))s+=3;if(/^Google US English$/i.test(n))s+=200;
+ if(/natural|neural|online/i.test(n))s+=60;if(/premium|enhanced|siri/i.test(n))s+=40;
+ if(/aria|jenny|michelle|ava\b|emma|sonia|libby|clara|nancy|jane|sara|zira|samantha|allison|susan|karen|moira|serena|tessa|fiona|victoria|zoe|joanna|salli|kendra|kimberly|female/i.test(n))s+=25;
+ if(/david|mark|guy|daniel|alex\b|fred|ryan|george|james|thomas|oliver|\bmale\b|rishi|aaron|arthur|gordon|ralph|junior|albert|eddy|reed|rocko|sandy|shelley|grandma|grandpa|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|hysterical/i.test(n))s-=60;
+ if(/compact|espeak/i.test(n))s-=30;return s}
+function chooseVoice(){if(!window.speechSynthesis)return;var all=speechSynthesis.getVoices()||[];
+ VX.list=all.filter(function(v){return vScore(v)>-100}).sort(function(a,b){return vScore(b)-vScore(a)});if(VX.auto||!VX.voice)VX.voice=VX.list[0]||null;
+ $("vsel").innerHTML='<option value="">Auto: best available female voice</option>'+VX.list.map(function(v,i){return '<option value="'+i+'">'+v.name+' ('+v.lang+')</option>'}).join("")}
+var PRON=[[/--/g,"dash dash "],[/\bBCNF\b/g,"B C N F"],[/\bID\b/g,"I D"],[/\bIDs\b/g,"I Ds"],[/[′★▸]/g,""],[/\(\)/g,""],[/_/g," "]];
+function speakable(t){PRON.forEach(function(p){t=t.replace(p[0],p[1])});return t}
+function say(t){if(!voiceOn||!window.speechSynthesis||!t)return;
+ try{var parts=speakable(t).match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[t],out=[];
+  parts.forEach(function(p){p=p.trim();if(!p)return;if(out.length&&out[out.length-1].length<28)out[out.length-1]+=" "+p;else out.push(p)});
+  out.forEach(function(p){var u=new SpeechSynthesisUtterance(p);if(VX.voice){u.voice=VX.voice;u.lang=VX.voice.lang}else u.lang="en-US";u.rate=.92;u.pitch=1;u.volume=.85;speechSynthesis.speak(u)})}catch(e){}}
+function hush(){try{window.speechSynthesis&&speechSynthesis.cancel()}catch(e){}}
+function dur(t){return Math.max(2400,voiceOn?t.split(" ").length*380:0)}
+
+/* ---------- graph model ---------- */
+function hx(n){return ((n*40503+9301)%65536).toString(16).padStart(4,"0")}
+function addC(id,p,x,y,o){var c={id:id,h:hx(hn++),p:p,x:x,y:y};if(o)for(var k in o)c[k]=o[k];S.cm.push(c);return c}
+function cmt(id){for(var i=0;i<S.cm.length;i++)if(S.cm[i].id===id)return S.cm[i]}
+function tip(b){return cmt(S.br[b])}
+function anc(a,b){if(a===b)return true;var c=cmt(b);return c?c.p.some(function(p){return anc(a,p)}):false}
+function base(){S={cm:[],br:{main:"B"},head:"main",sel:null,cs:0,done:false};hn=0;addC("A",[],0,0,{m:"start"});addC("B",["A"],1,0,{m:"first page"})}
+function pos(c){return {x:50+c.x*74,y:96+c.y*78}}
+function el(tag,at,par){var e=document.createElementNS(NS,tag);for(var k in at)e.setAttribute(k,at[k]);(par||svg).appendChild(e);return e}
+function clearSvg(){els={};svg.innerHTML="";gE=el("g");gN=el("g");gL=el("g")}
+function draw(){
+ var mx=0,my=0,used={};S.cm.forEach(function(c){mx=Math.max(mx,c.x);my=Math.max(my,c.y)});
+ svg.setAttribute("viewBox","0 0 "+Math.max(560,60+mx*74+90)+" "+(96+my*78+80));
+ S.cm.forEach(function(c){c.p.forEach(function(pid){var p=cmt(pid);if(!p)return;var k="e"+c.id+">"+pid;used[k]=1;var e=els[k];
+  if(!e){e=el("path",{fill:"none","stroke-width":3,"stroke-linecap":"round"},gE);els[k]=e;e.style.opacity=0;e.style.transition="opacity .4s";(function(e,c){setTimeout(function(){e.style.opacity=c.ghost?.35:1},c.from?550:60)})(e,c)}
+  else e.style.opacity=c.ghost?.35:1;
+  var a=pos(p),b=pos(c);e.setAttribute("d",a.y===b.y?"M"+a.x+" "+a.y+"L"+b.x+" "+b.y:"M"+a.x+" "+a.y+"C"+(a.x+44)+" "+a.y+","+(b.x-44)+" "+b.y+","+b.x+" "+b.y);
+  e.setAttribute("stroke",COLS[c.c!=null?c.c:c.y]);e.setAttribute("stroke-dasharray",c.ghost||c.pending?"5 5":"")});
+  if(c.copyOf){var o=cmt(c.copyOf);if(o){var k2="cp"+c.id;used[k2]=1;var q=els[k2];if(!q){q=el("path",{fill:"none","stroke-width":2,"stroke-dasharray":"3 5",stroke:"var(--a3)"},gE);els[k2]=q}
+   var a2=pos(o),b2=pos(c);q.setAttribute("d","M"+a2.x+" "+a2.y+"C"+a2.x+" "+(a2.y-50)+","+b2.x+" "+(b2.y+50)+","+b2.x+" "+b2.y)}}});
+ S.cm.forEach(function(c){var p=pos(c),k="c"+c.id;used[k]=1;var g=els[k];
+  if(!g){g=el("g",{"class":"cm"},gN);els[k]=g;var f=c.from?pos(c.from):p;g.style.transform="translate("+f.x+"px,"+f.y+"px)";g.style.opacity=c.from?1:0;
+   g.innerHTML='<circle class="rg" r="25" fill="none" stroke-width="3"></circle><circle class="cc" r="19"></circle><text class="ci" y="5" text-anchor="middle"></text><text class="ch" y="36" text-anchor="middle"></text><text class="cx" y="49" text-anchor="middle"></text>';g.getBoundingClientRect()}
+  g.style.transform="translate("+p.x+"px,"+p.y+"px)";g.style.opacity=c.ghost?.45:1;
+  var col=COLS[c.c!=null?c.c:c.y],cc=g.querySelector(".cc"),rg=g.querySelector(".rg");
+  cc.setAttribute("fill",c.pending?"var(--surface)":c.ghost?"none":col);cc.setAttribute("stroke",c.ghost||c.pending?col:"none");cc.setAttribute("stroke-width",2);cc.setAttribute("stroke-dasharray",c.ghost||c.pending?"4 3":"");
+  rg.setAttribute("stroke",S.sel===c.id?"var(--ink)":"none");
+  var ci=g.querySelector(".ci");ci.textContent=c.pending?"?":c.id;ci.setAttribute("fill",c.pending||c.ghost?"var(--ink)":"#fff");
+  g.querySelector(".ch").textContent=c.h;g.querySelector(".cx").textContent=c.m||"";
+  g.setAttribute("class","cm"+(T[tab].pick&&c.y===1&&!c.ghost?" pick":""));g.onclick=function(){T[tab].pick&&T[tab].pick(c)}});
+ var at={};Object.keys(S.br).forEach(function(b){(at[S.br[b]]=at[S.br[b]]||[]).push(b)});
+ Object.keys(at).forEach(function(cid){var c=cmt(cid);if(!c)return;var p=pos(c);at[cid].forEach(function(b,i){var k="l"+b;used[k]=1;var g=els[k],head=S.head===b,txt=(head?"HEAD ▸ ":"")+b,w=txt.length*7.4+20,col=COLS[BC[b]!=null?BC[b]:1];
+  if(!g){g=el("g",{"class":"lb"},gL);els[k]=g;g.innerHTML='<rect height="22" rx="11" y="-16"></rect><text y="0" text-anchor="middle"></text>';g.style.transform="translate("+p.x+"px,"+(p.y-40-i*26)+"px)";g.getBoundingClientRect()}
+  var r=g.querySelector("rect"),t=g.querySelector("text");r.setAttribute("width",w);r.setAttribute("x",-w/2);r.setAttribute("fill",head?col:"var(--surface)");r.setAttribute("stroke",col);r.setAttribute("stroke-width",2);
+  t.textContent=txt;t.setAttribute("fill",head?"#fff":col);g.style.transform="translate("+p.x+"px,"+(p.y-40-i*26)+"px)"})});
+ for(var k in els)if(!used[k]){els[k].remove();delete els[k]}}
+
+/* ---------- terminal, caption, buttons ---------- */
+function out(s,cls){var d=document.createElement("div");d.textContent=s;if(cls)d.className=cls;$("term").appendChild(d);$("term").scrollTop=$("term").scrollHeight}
+function cap(t,speak){lastCap=t;$("cap").textContent=t;if(speak!==false){hush();say(t)}}
+function exec(c){if(!c.ok())return;initAudio();out("$ "+c.t,"c");c.run();draw();refresh()}
+function refresh(){var box=$("cmds");box.innerHTML="";(T[tab].cmds?T[tab].cmds():[]).forEach(function(c){var b=document.createElement("button");b.className="cmd";b.textContent=c.t;b.disabled=!c.ok();b.onclick=function(){exec(c)};box.appendChild(b)});renderSide()}
+function letter(){return String.fromCharCode(65+S.cm.length)}
+function renderSide(){var s=$("side");s.innerHTML="";var T0=T[tab];
+ if(tab===4)return fileSide(s);
+ var h=document.createElement("h3");h.textContent="Good to know";s.appendChild(h);var p=document.createElement("p");p.textContent=T0.tip;s.appendChild(p);
+ if(tab===0){var l=document.createElement("label");l.innerHTML='<input type="checkbox" id="altc"> Show the older <code>git checkout</code> commands';s.appendChild(l);$("altc").checked=alt;$("altc").onchange=function(){alt=this.checked;refresh()}}}
+
+/* ---------- topics ---------- */
+var T=[
+{tab:"1. Branches",name:"Branches: a bookmark on a commit",a:"A branch is a sticky note stuck on a commit. Making one costs nothing.",rule:"HEAD means “you are here”. When you commit, the branch you are on moves forward. git switch moves you between branches.",
+ tip:"git switch only switches branches. git checkout does that and other jobs, such as restoring files, so newer Git added switch to be clearer. Both work for changing branches.",start:"Press Play, or click a command.",
+ init:function(){base()},auto:["swc","com","com","swm","com"],
+ cmds:function(){var f=!!S.br.feature;return [
+  {k:"swc",t:alt?"git checkout -b feature":"git switch -c feature",ok:function(){return !f},run:function(){S.br.feature=tip(S.head).id;S.head="feature";cap("A branch is only a label on a commit. Nothing was copied, and HEAD now points at feature.");SFX.branch()}},
+  {k:"swm",t:alt?"git checkout main":"git switch main",ok:function(){return f&&S.head!=="main"},run:function(){S.head="main";cap("HEAD moves to main. Your next commit will grow from main.");SFX.sw()}},
+  {k:"swf",t:alt?"git checkout feature":"git switch feature",ok:function(){return f&&S.head!=="feature"},run:function(){S.head="feature";cap("HEAD moves to feature. Your next commit will grow from feature.");SFX.sw()}},
+  {k:"com",t:"git commit",ok:function(){return S.cm.length<10},run:function(){var b=S.head,t=tip(b),c=addC(letter(),[t.id],t.x+1,LANE[b]);S.br[b]=c.id;cap("A new commit grows from the branch you are on. The other branch stays where it was.");SFX.commit()}}]}},
+{tab:"2. Merge",name:"Merge: bring two branches together",a:"Two roads join into one. Git remembers that they were separate.",rule:"If main has nothing new, Git just slides the main label forward (a fast-forward). If both branches changed, Git makes one new commit with two parents.",
+ tip:"A fast-forward adds no new commit. A merge commit is the only commit that has two parents. Merging is safe on shared branches because nothing is rewritten.",start:"Choose a case, then press Play.",
+ init:function(){base();addC("C",["B"],2,1,{m:"add search"});addC("D",["C"],3,1,{m:"polish"});S.br.feature="D";S.head="feature";if(mcase===1){addC("E",["B"],2,0,{m:"update footer"});S.br.main="E"}},auto:["swm","mrg"],scen:true,
+ cmds:function(){return [
+  {k:"swm",t:alt?"git checkout main":"git switch main",ok:function(){return S.head==="feature"},run:function(){S.head="main";cap("First move to the branch that should receive the work. That is main.");SFX.sw()}},
+  {k:"mrg",t:"git merge feature",ok:function(){return S.head==="main"&&!S.done},run:function(){var m=tip("main"),f=tip("feature");S.done=true;
+    if(anc(m.id,f.id)){S.br.main=f.id;cap("Main had nothing new, so Git simply slides the main label forward. This is called a fast-forward, and no new commit is made.");out("Fast-forward","o");SFX.sw()}
+    else{var M=addC("M",[m.id,f.id],Math.max(m.x,f.x)+1,0,{m:"merge"});S.br.main=M.id;cap("Both branches had new work, so Git makes one new commit with two parents to join them.");out("Merge made by the ort strategy.","o");SFX.merge()}}}]}},
+{tab:"3. Rebase",name:"Rebase: replay your work on top",a:"Pick up your commits and put them down again after the newest main, as if you had started later.",rule:"Rebase copies your commits onto a new starting point. The copies get new IDs, and the old ones are left behind. The result is a straight line.",
+ tip:"Golden rule: never rebase commits that other people already have. Rebase rewrites history, so their copies would no longer match yours. For your own private branch it is perfectly fine.",start:"Press Play to watch the replay.",
+ init:function(){base();addC("C",["B"],2,1,{m:"add search"});addC("D",["C"],3,1,{m:"polish"});addC("E",["B"],2,0,{m:"update footer"});S.br.main="E";S.br.feature="D";S.head="feature";S.rb=false},auto:["reb","swm","mrg"],
+ cmds:function(){return [
+  {k:"reb",t:"git rebase main",ok:function(){return S.head==="feature"&&!S.rb},run:function(){S.rb=true;var m=tip("main"),C=cmt("C"),D=cmt("D");C.ghost=D.ghost=true;
+    var C2=addC("C′",[m.id],m.x+1,1,{from:C,m:"add search"}),D2=addC("D′",[C2.id],m.x+2,1,{from:D,m:"polish"});S.br.feature=D2.id;
+    cap("Git copies your two commits and replays them after the newest main. The copies get new IDs, and the faded originals are left behind.");out("Successfully rebased and updated refs/heads/feature.","o");SFX.rebase()}},
+  {k:"swm",t:alt?"git checkout main":"git switch main",ok:function(){return S.rb&&S.head==="feature"},run:function(){S.head="main";cap("Now switch to main so it can receive the finished work.");SFX.sw()}},
+  {k:"mrg",t:"git merge feature",ok:function(){return S.rb&&S.head==="main"&&!S.done},run:function(){S.done=true;S.br.main=S.br.feature;cap("Main fast-forwards to the end of your branch. The history is one straight line.");out("Fast-forward","o");SFX.merge()}}]}},
+{tab:"4. Cherry-pick",name:"Cherry-pick: take just one commit",a:"Pick one cherry from the tree without taking the whole branch.",rule:"Click a commit on the feature branch, then cherry-pick it. Git copies that one change onto your current branch as a new commit.",
+ tip:"The copy has a new ID because it sits on a different parent. The original stays on feature, so nothing is lost.",start:"Click a commit on the feature branch to choose it.",picked:{},
+ init:function(){base();addC("C",["B"],2,1,{m:"bug fix"});addC("D",["C"],3,1,{m:"half-done page"});addC("E",["D"],4,1,{m:"docs"});S.br.feature="E";S.head="main";T[3].picked={}},
+ pick:function(c){if(T[3].picked[c.id])return;S.sel=c.id;cap("You chose "+c.m+". Now run cherry-pick to copy it onto main.");SFX.pick();draw();refresh()},auto:[function(){T[3].pick(cmt("C"))},"cp"],
+ cmds:function(){var o=S.sel&&cmt(S.sel);return [
+  {k:"cp",t:"git cherry-pick "+(o?o.h:"<commit>"),ok:function(){return !!o&&S.head==="main"},run:function(){var t=tip("main"),n=addC(o.id+"′",[t.id],t.x+1,0,{from:o,m:o.m,copyOf:o.id});S.br.main=n.id;T[3].picked[o.id]=1;S.sel=null;
+    cap("Git copies just that one change onto main as a new commit. The original stays on feature.");out("[main "+n.h+"] "+o.m,"o");SFX.pick()}}]}},
+{tab:"5. Conflicts",name:"Merge conflicts: when Git needs your decision",a:"Two people edited the same line of the same page. Git can’t guess who is right, so it asks you.",rule:"A conflict is not an error. Edit the file to keep what you want, tell Git with git add, then git commit. Changed your mind? git merge --abort goes back.",
+ start:"Press Play, or click git merge feature.",
+ init:function(){base();addC("C",["B"],2,1,{m:"store wording"});addC("E",["B"],2,0,{m:"shop wording"});S.br.main="E";S.br.feature="C";S.head="main";S.cs=0;S.res=null},auto:["mrg",function(){resolve("both")},"add","cmt"],
+ cmds:function(){return [
+  {k:"mrg",t:"git merge feature",ok:function(){return S.cs===0},run:function(){S.cs=1;var e=tip("main"),c=tip("feature");addC("?",[e.id,c.id],3,0,{pending:true,m:"merging…"});
+    out("Auto-merging shop.txt","o");out("CONFLICT (content): Merge conflict in shop.txt","e");out("Automatic merge failed; fix conflicts and then commit the result.","e");
+    cap("Both branches changed the same line, so Git stops and asks you to decide. Look at the file on the right.");SFX.soft()}},
+  {k:"st",t:"git status",ok:function(){return true},run:function(){var m=["On branch main. Nothing to commit.","Unmerged paths: both modified: shop.txt. Git is waiting for you to fix it.","Fixed in the file, but not yet marked. Run git add shop.txt.","All conflicts fixed but you are still merging. Run git commit."][Math.min(S.cs,3)];if(S.cs===4)m="On branch main. The merge is finished.";out(m,"o");cap(m,false)}},
+  {k:"add",t:"git add shop.txt",ok:function(){return S.cs===2},run:function(){S.cs=3;cap("Adding the file tells Git you have finished resolving it.");SFX.pick()}},
+  {k:"cmt",t:"git commit",ok:function(){return S.cs===3},run:function(){S.cs=4;var e=tip("main"),c=tip("feature");S.cm=S.cm.filter(function(x){return !x.pending});var M=addC("M",[e.id,c.id],3,0,{m:"merge"});S.br.main=M.id;out("[main "+M.h+"] Merge branch 'feature'","o");cap("The merge is complete. One new commit joins both branches, with your decision recorded in it.");SFX.ok()}},
+  {k:"ab",t:"git merge --abort",ok:function(){return S.cs>=1&&S.cs<=3},run:function(){S.cm=S.cm.filter(function(x){return !x.pending});S.cs=0;S.res=null;out("Merge cancelled. Back to where you started.","o");cap("Merge cancelled. Everything is back to how it was before you started.");SFX.sw()}}]}}];
+
+function resolve(kind,own){if(S.cs<1||S.cs>2)return;var m={mine:["Welcome to our shop"],theirs:["Welcome to our store"],both:["Welcome to our shop","Welcome to our store"]};
+ var r=kind==="own"?[own||""].filter(Boolean):m[kind];if(!r||!r.length){cap("Type a line first, then choose Use my own.",false);return}
+ S.res=r;S.cs=2;cap("The conflict markers are gone and the file says what you want. Now tell Git with git add.");SFX.pick();refresh()}
+function fileSide(s){var h=document.createElement("h3");h.textContent="shop.txt";s.appendChild(h);
+ var st=["On main","Conflict: Git is waiting for you","Resolved in the file (not added yet)","Resolved and added","Merged"][S.cs];var ch=document.createElement("span");ch.className="chip";ch.textContent=st;s.appendChild(ch);
+ var f=document.createElement("div");f.className="file";var L=[["# shop.txt"],["Open every day"]];
+ if(S.cs===1)L=L.concat([["<<<<<<< HEAD","mk"],["Welcome to our shop","mine"],["=======","mk"],["Welcome to our store","theirs"],[">>>>>>> feature","mk"]]);
+ else if(S.cs>=2)S.res.forEach(function(x){L.push([x])});else L.push(["Welcome to our shop"]);
+ L.push(["Thank you for visiting"]);L.forEach(function(x){var d=document.createElement("div");d.textContent=x[0];if(x[1])d.className=x[1];f.appendChild(d)});s.appendChild(f);
+ if(S.cs===1){var lg=document.createElement("p");lg.innerHTML='<span class="chip" style="background:var(--mine)">green = your version (main)</span> <span class="chip" style="background:var(--theirs)">blue = their version (feature)</span>';s.appendChild(lg)}
+ if(S.cs===1||S.cs===2){var r=document.createElement("div");r.className="res";r.innerHTML='<button data-k="mine">Keep mine</button><button data-k="theirs">Keep theirs</button><button data-k="both">Keep both</button><input id="own" placeholder="or write your own line" aria-label="Your own line"><button data-k="own">Use my own</button>';
+  Array.prototype.forEach.call(r.querySelectorAll("button"),function(b){b.onclick=function(){initAudio();resolve(b.getAttribute("data-k"),$("own").value.trim())}});s.appendChild(r)}}
+
+/* ---------- quiz ---------- */
+var QS=[
+{t:"Start something new",sit:"You are on main and want to try a risky idea without touching main.",q:"Which command do you use?",o:[{t:"git switch -c risky-idea",p:10,fb:"It creates a new branch and moves you onto it in one step. Main stays safe."},{t:"git branch risky-idea",p:5,fb:"It creates the branch but leaves you on main. You would still need to switch to it."},{t:"git merge risky-idea",p:0,fb:"Merge joins branches. It doesn’t create one."},{t:"git checkout main",p:0,fb:"You are already on main, so nothing would change."}],why:"Create the branch and switch to it, then commit freely.",code:"git switch -c risky-idea"},
+{t:"The straight line",sit:"Your feature branch started from main. Since then, main has not changed. You run git merge feature while on main.",q:"What happens?",o:[{t:"Fast-forward: main just moves to your latest commit.",p:10,fb:"With nothing to join, Git slides the label forward and makes no merge commit."},{t:"A merge commit is created, only if you ask for it with --no-ff.",p:5,fb:"True when you ask for it. Some teams prefer that, but by default Git fast-forwards."},{t:"Git always creates a merge commit.",p:0,fb:"Only when both branches have new work."},{t:"Git reports a conflict.",p:0,fb:"Conflicts need both sides to change the same lines."}],why:"A fast-forward moves the branch label. It doesn’t create a commit.",code:"git switch main\ngit merge feature   # Fast-forward"},
+{t:"Keep it tidy",sit:"You are on your own private feature branch. Main moved ahead. You want your commits on top of the latest main, as a straight line. Nobody else uses your branch.",q:"What do you run?",o:[{t:"git rebase main",p:10,fb:"It replays your commits after the newest main, giving a straight history. Fine for a private branch."},{t:"git merge main",p:5,fb:"Safe and valid, but it adds a merge commit, so history isn’t a straight line."},{t:"git cherry-pick main",p:0,fb:"Cherry-pick copies chosen commits. It isn’t how you catch up with a whole branch."},{t:"git switch main",p:0,fb:"That only moves HEAD. Nothing is integrated."}],why:"Rebase is for tidying your own work before sharing it.",code:"git switch feature\ngit rebase main"},
+{t:"A shared branch",sit:"A teammate has already pulled your branch. You are tempted to rebase it to tidy the history.",q:"What is the best choice?",o:[{t:"Don’t rebase it. Merge instead.",p:10,fb:"Rebase makes new commits. Your teammate’s copy would no longer match, causing confusing conflicts."},{t:"Ask the team first, then rebase and use --force-with-lease.",p:5,fb:"Possible when everyone agrees and knows how to re-sync, but risky. Merge is simpler and safer."},{t:"Rebase and force push.",p:0,fb:"This overwrites history that other people are using."},{t:"Rebase quietly. Nobody will notice.",p:0,fb:"They will notice when their next pull goes wrong."}],why:"Never rewrite history that other people already have.",code:"git merge main   # on the shared branch"},
+{t:"Just the fix",sit:"Your feature branch has a finished bug fix and a half-done page. Main needs only the bug fix today.",q:"What do you do?",o:[{t:"git cherry-pick the bug-fix commit onto main.",p:10,fb:"It copies that single commit and leaves the half-done work behind."},{t:"Copy the changed files by hand.",p:5,fb:"It works, but you lose the commit and risk mistakes."},{t:"git merge feature.",p:0,fb:"That would bring the half-done page into main as well."},{t:"git rebase feature.",p:0,fb:"That moves main’s work onto feature, which is not what you want."}],why:"Cherry-pick is for moving one commit without the rest.",code:"git switch main\ngit cherry-pick 3f9a"},
+{t:"CONFLICT!",sit:"You run git merge and Git says CONFLICT in shop.txt.",q:"What is the right sequence?",o:[{t:"Edit the file to keep what you want, git add it, then git commit.",p:10,fb:"That is the whole recipe: decide, mark as resolved, finish the merge."},{t:"git merge --abort",p:5,fb:"A safe way out if you want to stop and try later. It doesn’t resolve the conflict."},{t:"git reset --hard and hope.",p:0,fb:"That throws away your work."},{t:"Delete the repository and clone again.",p:0,fb:"You would lose everything that isn’t pushed."}],why:"A conflict is just Git asking you a question. Answer it in the file.",code:"# edit shop.txt, remove the markers\ngit add shop.txt\ngit commit"},
+{t:"Switch or checkout?",sit:"A colleague says git switch and git checkout do the same job.",q:"Is that right?",o:[{t:"For changing branches, yes. switch is the newer, clearer command, and checkout has other jobs too.",p:10,fb:"switch was added in Git 2.23 to do one thing well."},{t:"No. checkout is the only correct one.",p:0,fb:"Both work for switching branches."},{t:"No. switch deletes the old branch.",p:0,fb:"Neither command deletes a branch."},{t:"Yes, so they are identical in every way.",p:5,fb:"Close, but checkout can also restore files and more, so they aren’t identical."}],why:"Use switch for branches when your Git has it.",code:"git switch feature   # same result as git checkout feature"}];
+var qz={order:[],i:0,score:0,res:[],opts:[],ans:false};
+function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),x=a[i];a[i]=a[j];a[j]=x}return a}
+function startQuiz(){qz.order=shuf(QS.map(function(_,i){return i}));qz.i=0;qz.score=0;qz.res=[];renderQ()}
+function renderQ(){var n=QS.length;if(qz.i>=n)return fin();var q=QS[qz.order[qz.i]];qz.opts=shuf(q.o);qz.ans=false;
+ $("qprog").textContent="Scenario "+(qz.i+1)+" of "+n;$("qscore").textContent="Score: "+qz.score+" / "+n*10;$("qb").style.width=(qz.i/n*100)+"%";
+ $("qbody").innerHTML='<h3>'+q.t+'</h3><p>'+q.sit+'</p><p><b>'+q.q+'</b></p><div class="opts">'+qz.opts.map(function(o,k){return '<button class="opt" data-k="'+k+'">'+o.t+'</button>'}).join("")+'</div><div class="fbk" id="fbk" hidden></div>';
+ hush();say(q.sit+" "+q.q)}
+function ans(k){if(qz.ans)return;qz.ans=true;var q=QS[qz.order[qz.i]],o=qz.opts[k],p=o.p;qz.score+=p;qz.res.push({t:q.t,p:p});$("qscore").textContent="Score: "+qz.score+" / "+QS.length*10;
+ Array.prototype.forEach.call($("qbody").querySelectorAll(".opt"),function(b,j){var oo=qz.opts[j];b.disabled=true;b.classList.add(oo.p===10?"best":oo.p===5?"mid":"bad");if(j===k)b.classList.add("picked")});
+ var cls=p===10?"best":p===5?"mid":"bad",head=p===10?"Nicely done. +10":p===5?"Reasonable, though not the best fit. +5":"Not quite. +0",f=$("fbk");
+ f.className="fbk "+cls;f.hidden=false;f.innerHTML='<h4>'+head+'</h4><p>'+o.fb+'</p><p><b>The best move:</b> '+q.why+'</p><pre id="fcode" class="term" style="min-height:0"></pre><button class="go" id="qnext">'+(qz.i+1>=QS.length?"See my result":"Next scenario")+'</button>';
+ $("fcode").textContent=q.code;if(p===10)SFX.ok();else if(p===5){tone(440,.15);tone(523,.2,"sine",.03,.15)}else SFX.soft();hush();say(head+" "+o.fb+" "+q.why)}
+function fin(){var n=QS.length,max=n*10,s=qz.score,r=s>=max*.85?"Git confident":s>=max*.55?"Getting there":"Keep practicing",
+ m=s>=max*.85?"You think before you merge, rebase or pick. That is exactly the habit.":s>=max*.55?"Good instincts. Review the ones marked with a cross or a tilde, then try again.":"Revisit the topics above, then try again. It gets easier fast.";
+ $("qb").style.width="100%";$("qprog").textContent="Finished";$("qscore").textContent="Score: "+s+" / "+max;
+ $("qbody").innerHTML='<h3>'+r+': '+s+' / '+max+'</h3><p>'+m+'</p><ul>'+qz.res.map(function(x){return '<li>'+(x.p===10?"✓":x.p===5?"~":"✗")+" "+x.t+" ("+x.p+")</li>"}).join("")+'</ul><button class="go" id="qretry">Try again with a new order</button>';
+ if(s>=max*.55)SFX.ok();else SFX.soft();hush();say(r+". You scored "+s+" out of "+max+". "+m)}
+$("qbody").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;
+ if(b.classList.contains("opt")){initAudio();ans(+b.getAttribute("data-k"))}else if(b.id==="qnext"){qz.i++;renderQ()}else if(b.id==="qretry")startQuiz()});
+
+/* ---------- controls ---------- */
+function reset(){runId++;hush();T[tab].init();clearSvg();$("term").innerHTML="";out("# A new practice repository","o");cap(T[tab].start,false);draw();refresh()}
+function show(i){runId++;hush();tab=i;var t=T[i];$("tName").textContent=t.name||"Challenge: choose the right move";$("tAnalogy").textContent=t.a;$("tRule").textContent=t.rule;
+ Array.prototype.forEach.call($("tabs").children,function(b,k){b.setAttribute("aria-pressed",k===i)});
+ var ch=i===5;$("lab").hidden=ch;$("quiz").hidden=!ch;$("bPlay").hidden=ch;$("scen").hidden=!t.scen;if(ch)startQuiz();else reset()}
+function play(){reset();initAudio();var id=runId,steps=T[tab].auto.slice();
+ function step(){if(id!==runId||!steps.length){$("bPlay").disabled=false;return}var s=steps.shift();
+  if(typeof s==="function"){s();draw();refresh()}else{var c=T[tab].cmds().filter(function(x){return x.k===s})[0];if(c)exec(c)}
+  setTimeout(step,dur(lastCap)+500)}
+ $("bPlay").disabled=true;setTimeout(function(){if(id===runId)step()},500)}
+T.push({tab:"6. Challenge",a:"Real work doesn’t come with labels. You get a situation and choose a move.",rule:"Seven short scenarios. 10 points for the best move, 5 for reasonable, 0 for not recommended. Take your time."});
+T.forEach(function(t,i){var b=document.createElement("button");b.textContent=t.tab;b.onclick=function(){show(i)};$("tabs").appendChild(b)});
+$("bPlay").onclick=play;$("bReset").onclick=reset;
+$("bSound").onclick=function(){soundOn=!soundOn;this.setAttribute("aria-pressed",soundOn);this.textContent="Sound: "+(soundOn?"on":"off")};
+$("bVoice").onclick=function(){voiceOn=!voiceOn;this.setAttribute("aria-pressed",voiceOn);this.textContent="Voice: "+(voiceOn?"on":"off");if(!voiceOn)hush()};
+$("cA").onclick=function(){mcase=0;$("cA").setAttribute("aria-pressed","true");$("cB").setAttribute("aria-pressed","false");reset()};
+$("cB").onclick=function(){mcase=1;$("cB").setAttribute("aria-pressed","true");$("cA").setAttribute("aria-pressed","false");reset()};
+if(window.speechSynthesis){chooseVoice();speechSynthesis.onvoiceschanged=chooseVoice;
+ $("vsel").onchange=function(){VX.auto=this.value==="";VX.voice=VX.auto?VX.list[0]||null:VX.list[+this.value];hush();say("Hello. This is how I will sound while I explain.")}}
+show(0);
+})();
+</script>
+</body>
+</html>
