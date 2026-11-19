@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AWS high availability and load balancing with ELB and Auto Scaling, explained by watching it work</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f3f5f7;--surface:#fff;--ink:#14212b;--mute:#5b6b78;--line:#d5dde3;--accent:#0b7a75;--a2:#3b6fd4;--a3:#c9741a;--a4:#8a5cc2;--bad:#c4452d;--good:#1f8a4c;--warn:#a86d00;--code:#eaf0f3;--okbg:rgba(31,138,76,.16);--badbg:rgba(196,69,45,.14);--wnbg:rgba(168,109,0,.16);
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--a4:#b79cf0;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;--okbg:rgba(85,214,138,.2);--badbg:rgba(255,122,92,.18);--wnbg:rgba(240,184,74,.18);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a22;--surface:#17252f;--ink:#e6eef3;--mute:#93a5b2;--line:#2b3d4a;--accent:#3fc2b9;--a2:#7fa6f0;--a3:#f0a64f;--a4:#b79cf0;--bad:#ff7a5c;--good:#55d68a;--warn:#f0b84a;--code:#0c151c;--okbg:rgba(85,214,138,.2);--badbg:rgba(255,122,92,.18);--wnbg:rgba(240,184,74,.18);color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:22px 16px 48px}
+h1{font-size:clamp(26px,4.6vw,40px);line-height:1.08;margin:0 0 10px;letter-spacing:-.02em}
+h2{margin:0 0 4px;font-size:24px;letter-spacing:-.01em}
+.lede{color:var(--mute);max-width:70ch;margin:0 0 16px}
+.tabs,.controls,.row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+button,select{font:inherit;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);padding:8px 13px;border-radius:8px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700;padding:10px 20px}
+button.sm,select.sm{padding:5px 10px;font-size:13px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+select#vsel{max-width:min(300px,100%)}
+.explain{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+.analogy{font-size:20px;line-height:1.35;margin:4px 0 8px;color:var(--accent);font-weight:700}
+.explain p{margin:0 0 6px}.kw{color:var(--mute);font-size:14px}
+.stage{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px;margin-bottom:12px}
+.sl{display:flex;flex-direction:column;font:500 13px "IBM Plex Mono",monospace;color:var(--mute)}.sl input{width:100%}
+.ck{font:500 13px "IBM Plex Mono",monospace;color:var(--mute);display:flex;gap:6px;align-items:center}
+.live{min-height:3.2em;margin:12px 0;padding:10px 14px;border-left:5px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.card h3{font-size:12px;margin:0 0 2px;color:var(--mute);font-weight:500}
+.big{font:500 24px "IBM Plex Mono",monospace}.ok{color:var(--good)}.no{color:var(--bad)}.wn{color:var(--warn)}
+.sub{font-size:12px;color:var(--mute)}
+.lbbar{border:2px solid var(--accent);border-radius:10px;padding:6px 10px;text-align:center;font:500 13px "IBM Plex Mono",monospace;margin-bottom:10px;background:var(--bg)}
+.azs{display:grid;gap:10px;margin-bottom:6px}
+.az{border:2px dashed var(--line);border-radius:10px;padding:8px;min-height:90px}.az.dn{border-color:var(--bad);background:var(--badbg)}
+.az h4{margin:0 0 6px;font:500 12px "IBM Plex Mono",monospace;color:var(--mute)}
+.ins{display:flex;flex-wrap:wrap;gap:6px}
+.iv{width:74px;border:2px solid var(--line);border-radius:8px;padding:4px;font:400 11px "IBM Plex Mono",monospace;text-align:center;background:var(--bg);position:relative}
+.iv.u0{border-color:var(--good)}.iv.u1{border-color:var(--warn);background:var(--wnbg)}.iv.u2{border-color:var(--bad);background:var(--badbg)}
+.iv.pend{opacity:.55;border-style:dashed}.iv.hung{border-color:var(--warn);background:var(--wnbg)}.iv.un{border-color:var(--bad);background:var(--badbg);cursor:pointer}.iv.cl{cursor:pointer}
+.iv .br{height:5px;background:var(--accent);border-radius:3px;margin-top:3px}
+.nodes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}
+.nd{border:2px solid var(--accent);border-radius:10px;padding:6px;text-align:center;font:500 13px "IBM Plex Mono",monospace;background:var(--bg)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.dt{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--a3);transition:left .6s linear,top .6s linear,opacity .6s;z-index:5;pointer-events:none}
+.chart{width:100%;height:90px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0}
+.tbl td,.tbl th{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;font-family:"IBM Plex Mono",monospace}
+.tbl tr.hit td{background:var(--okbg)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+.tg{border:2px solid var(--line);border-radius:10px;padding:6px 8px;margin-bottom:6px;font:400 12px "IBM Plex Mono",monospace;background:var(--bg)}.tg.hit{border-color:var(--good);background:var(--okbg)}
+.tag{display:inline-block;font:500 11px "IBM Plex Mono",monospace;border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--mute)}
+.rec{background:var(--okbg);border-left:5px solid var(--good);border-radius:0 8px 8px 0;padding:10px 14px;margin-top:10px}
+.quiz{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.qtop{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;font:500 13px "IBM Plex Mono",monospace;color:var(--mute)}
+.qbar{height:6px;background:var(--line);border-radius:3px;margin-bottom:12px;overflow:hidden}
+.qbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s linear}
+.quiz h3{margin:0 0 6px;font-size:22px}
+.opts{display:grid;gap:8px;margin-top:10px}
+.opt{text-align:left;padding:10px 14px;background:var(--bg)}.opt:disabled{opacity:1;cursor:default}
+.opt.best{border-color:var(--good);background:var(--okbg)}.opt.mid{border-color:var(--warn);background:var(--wnbg)}.opt.bad{border-color:var(--bad);background:var(--badbg)}.opt.picked{outline:3px solid var(--ink)}
+.fbk{margin-top:14px;padding:12px 14px;border-radius:8px;background:var(--bg);border-left:5px solid var(--accent)}
+.fbk.best{border-left-color:var(--good)}.fbk.mid{border-left-color:var(--warn)}.fbk.bad{border-left-color:var(--bad)}
+.fbk h4{margin:0 0 4px;font-size:18px}.fbk p{margin:0 0 8px}.quiz ul{padding-left:20px}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:18px}
+table.ref{width:100%;border-collapse:collapse;font-size:14px}
+.ref th,.ref td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.ref th{color:var(--mute);font-weight:500;white-space:nowrap}
+code{font-family:"IBM Plex Mono",monospace;font-size:.92em}
+.cap{font-size:13px;color:var(--mute);margin-top:10px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.dt,.qbar i{transition:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>High availability and load balancing on AWS</h1>
+<p class="lede">High availability means your application keeps working when something breaks. Here you can experiment with Availability Zones, load balancers and Auto Scaling: move the sliders, break things on purpose and watch what happens. A soft voice explains each change. Press <b>Play story</b> for a guided tour of any tab.</p>
+
+<div class="tabs" id="tabs" role="group" aria-label="Topic"></div>
+<section class="explain" aria-live="polite">
+  <h2 id="tName"></h2>
+  <p class="analogy" id="tAnalogy"></p>
+  <p id="tRule"></p>
+  <p class="kw" id="tKw"></p>
+</section>
+
+<div class="controls">
+  <button class="go" id="bPlay">Play story</button>
+  <button id="bPause" aria-pressed="false">Pause</button>
+  <button id="bSpeed">Speed: 1x</button>
+  <button id="bReset">Reset</button>
+  <button id="bExplain">Explain this</button>
+  <button id="bSound" aria-pressed="true">Sound: on</button>
+  <button id="bVoice" aria-pressed="true">Voice: on</button>
+  <select id="vsel" aria-label="Voice choice"></select>
+</div>
+
+<div class="stage" id="stage"></div>
+<div class="live" id="cap" aria-live="polite"></div>
+
+<div class="tw"><table class="ref">
+<tr><th>Load balancer</th><th>Layer and protocols</th><th>Remember for the exam</th></tr>
+<tr><td><b>ALB</b> Application</td><td>Layer 7: HTTP, HTTPS, gRPC, WebSocket</td><td>Routes by path, host, header or query string. Targets: instances, IPs, Lambda. Redirects, fixed responses, Cognito or OIDC login. No static IP. Cross-zone is always on.</td></tr>
+<tr><td><b>NLB</b> Network</td><td>Layer 4: TCP, UDP, TLS</td><td>Extreme performance and ultra-low latency. Static IP or Elastic IP per AZ. Keeps the client IP. TLS passthrough. Works with PrivateLink. Cross-zone is off by default.</td></tr>
+<tr><td><b>GWLB</b> Gateway</td><td>Layer 3 (GENEVE)</td><td>Sends traffic through third-party virtual appliances such as firewalls.</td></tr>
+<tr><td><b>CLB</b> Classic</td><td>Layer 4 and 7, legacy</td><td>Old generation. New designs use ALB or NLB.</td></tr>
+</table></div>
+<div class="tw"><table class="ref">
+<tr><th>Auto Scaling concept</th><th>Remember for the exam</th></tr>
+<tr><td>Min, desired, max</td><td>The group keeps the desired number of instances, between min and max. It spreads them across the AZs you choose.</td></tr>
+<tr><td>Health checks</td><td>EC2 checks are the default. Turn on ELB health checks so the group also replaces instances that fail the load balancer’s check. Health check grace period default: 300 seconds.</td></tr>
+<tr><td>Scaling policies</td><td>Target tracking (simplest, such as keep CPU near 50%), step scaling, simple scaling, scheduled scaling, predictive scaling.</td></tr>
+<tr><td>Scale on requests</td><td>ALBRequestCountPerTarget is a ready-made metric for target tracking.</td></tr>
+<tr><td>Deregistration delay</td><td>Connection draining for target groups. Default 300 seconds, so in-flight requests finish before an instance is removed.</td></tr>
+</table></div>
+<p class="cap">Teaching simulations: the numbers are small and made up so the effects are easy to see. Quotas and defaults change, so check AWS’s current documentation before relying on an exact number. Voice uses your browser’s built-in speech, and sound starts after your first click.</p>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var soundOn=true,voiceOn=true,AC=null,tab=0,runId=0,sim={speed:1,paused:false,eng:null},said={};
+
+/* ---------- audio: soft and quiet ---------- */
+function tone(f,d,ty,g,t0){if(!AC||!soundOn)return;var o=AC.createOscillator(),a=AC.createGain(),t=AC.currentTime+(t0||0);o.type=ty||"sine";o.frequency.value=f;a.gain.setValueAtTime(g||.03,t);a.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(a);a.connect(AC.destination);o.start(t);o.stop(t+d+.02)}
+function initAudio(){if(!soundOn)return;if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==="suspended")AC.resume()}
+var SFX={tick:function(){tone(520,.06,"sine",.02)},up:function(){tone(392,.12);tone(523,.16,"sine",.03,.1)},down:function(){tone(523,.12);tone(392,.16,"sine",.03,.1)},ok:function(){[523,659,784].forEach(function(f,i){tone(f,.28,"sine",.033,i*.1)})},soft:function(){tone(220,.3,"triangle",.035);tone(208,.3,"triangle",.03,.05)},pick:function(){tone(700,.09,"triangle",.035)}};
+
+/* ---------- voice: gentle, Google US English first ---------- */
+var VX={voice:null,list:[],auto:true};
+function vScore(v){var n=v.name,s=0;if(!/^en/i.test(v.lang))return -999;s+=10;if(/en[-_]US/i.test(v.lang))s+=3;if(/^Google US English$/i.test(n))s+=200;
+ if(/natural|neural|online/i.test(n))s+=60;if(/premium|enhanced|siri/i.test(n))s+=40;
+ if(/aria|jenny|michelle|ava\b|emma|sonia|libby|clara|nancy|jane|sara|zira|samantha|allison|susan|karen|moira|serena|tessa|fiona|victoria|zoe|joanna|salli|kendra|kimberly|female/i.test(n))s+=25;
+ if(/david|mark|guy|daniel|alex\b|fred|ryan|george|james|thomas|oliver|\bmale\b|rishi|aaron|arthur|gordon|ralph|junior|albert|eddy|reed|rocko|sandy|shelley|grandma|grandpa|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|hysterical/i.test(n))s-=60;
+ if(/compact|espeak/i.test(n))s-=30;return s}
+function chooseVoice(){if(!window.speechSynthesis)return;var all=speechSynthesis.getVoices()||[];
+ VX.list=all.filter(function(v){return vScore(v)>-100}).sort(function(a,b){return vScore(b)-vScore(a)});if(VX.auto||!VX.voice)VX.voice=VX.list[0]||null;
+ $("vsel").innerHTML='<option value="">Auto: best available female voice</option>'+VX.list.map(function(v,i){return '<option value="'+i+'">'+v.name+' ('+v.lang+')</option>'}).join("")}
+var PRON=[[/--/g,"dash dash "],[/\bALB\b/g,"A L B"],[/\bNLB\b/g,"N L B"],[/\bGWLB\b/g,"G W L B"],[/\bCLB\b/g,"C L B"],[/\bELB\b/g,"E L B"],[/\bASG\b/g,"A S G"],[/\bAZs\b/g,"A Zs"],[/\bAZ\b/g,"A Z"],[/\bEC2\b/g,"E C two"],[/\bRDS\b/g,"R D S"],[/\bTCP\b/g,"T C P"],[/\bUDP\b/g,"U D P"],[/\bTLS\b/g,"T L S"],[/\bAWS\b/g,"A W S"],[/\bHTTPS?\b/g,"H T T P"],[/\bCPU\b/g,"C P U"],[/\bIP\b/g,"I P"],[/\bDNS\b/g,"D N S"],[/\bID\b/g,"I D"],[/[→▸]/g," to "],[/_/g," "]];
+function speakable(t){PRON.forEach(function(p){t=t.replace(p[0],p[1])});return t}
+function say(t){if(!voiceOn||!window.speechSynthesis||!t)return;
+ try{var parts=speakable(t).match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[t],out=[];
+  parts.forEach(function(p){p=p.trim();if(!p)return;if(out.length&&out[out.length-1].length<28)out[out.length-1]+=" "+p;else out.push(p)});
+  out.forEach(function(p){var u=new SpeechSynthesisUtterance(p);if(VX.voice){u.voice=VX.voice;u.lang=VX.voice.lang}else u.lang="en-US";u.rate=.92;u.pitch=1;u.volume=.85;speechSynthesis.speak(u)})}catch(e){}}
+function hush(){try{window.speechSynthesis&&speechSynthesis.cancel()}catch(e){}}
+function cap(t,speak){$("cap").textContent=t;if(speak!==false){hush();say(t)}}
+function nar(k,t){if(said[k])return;said[k]=1;cap(t)}
+
+/* ---------- helpers ---------- */
+function slider(id,label,min,max,val,step,unit){return '<label class="sl"><span>'+label+': <b id="v_'+id+'">'+val+'</b>'+(unit||"")+'</span><input type="range" id="s_'+id+'" min="'+min+'" max="'+max+'" value="'+val+'" step="'+(step||1)+'"></label>'}
+function chk(id,label,on){return '<label class="ck"><input type="checkbox" id="c_'+id+'"'+(on?" checked":"")+'> '+label+'</label>'}
+function bindS(P,ids,cb){ids.forEach(function(id){var s=$("s_"+id);s.oninput=function(){P[id]=+s.value;$("v_"+id).textContent=s.value;cb&&cb(id)}})}
+function bindC(P,ids,cb){ids.forEach(function(id){var c=$("c_"+id);c.onchange=function(){P[id]=c.checked;cb&&cb(id)}})}
+function setS(P,id,v){P[id]=v;var s=$("s_"+id);if(s){s.value=v;$("v_"+id).textContent=v}}
+function setC(P,id,v){P[id]=v;var c=$("c_"+id);if(c)c.checked=v}
+function card(id,h){return '<div class="card"><h3>'+h+'</h3><div class="big" id="'+id+'">0</div><div class="sub" id="'+id+'s"></div></div>'}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function seq(steps){var id=runId,i=0;$("bPlay").disabled=true;(function next(){if(id!==runId||i>=steps.length){$("bPlay").disabled=false;return}var s=steps[i++];s[0]();setTimeout(next,s[1])})()}
+function azn(i){return "AZ-"+"ABC".charAt(i)}
+
+/* ---------- 1. capacity planner ---------- */
+var E1={mount:function(){var P=this.P={azs:2,per:3,traffic:80,fail:false},me=this;
+ $("stage").innerHTML='<div class="ctl">'+slider("azs","Availability Zones used",1,3,2)+slider("per","Instances per AZ",1,6,3)+slider("traffic","Traffic (requests per second)",0,400,80,10)+'</div><div class="row"><button class="sm" id="fz">Fail AZ-A</button><span class="kw">Each instance can handle 20 requests per second.</span></div><div class="lbbar" id="lbb"></div><div class="azs" id="azs"></div><div class="grid">'+card("p1","Capacity right now")+card("p2","Utilization")+card("p3","Requests dropped per second")+card("p4","Survives losing one AZ?")+'</div>';
+ bindS(P,["azs","per","traffic"],function(){me.draw()});$("fz").onclick=function(){initAudio();me.toggle()};this.draw()},
+ calc:function(){var P=this.P,H=(P.fail?Math.max(0,P.azs-1):P.azs)*P.per,capN=H*20,drop=Math.max(0,P.traffic-capN),after=(P.azs-1)*P.per*20;return {H:H,cap:capN,drop:drop,after:after,surv:after>=P.traffic&&P.azs>1}},
+ toggle:function(){var P=this.P;P.fail=!P.fail;$("fz").textContent=P.fail?"Recover AZ-A":"Fail AZ-A";this.draw();var c=this.calc();
+  if(P.fail){if(P.azs===1)cap("The only Availability Zone failed, and with it the whole application. This is a single point of failure.");else if(c.drop>0){cap("AZ-A failed. The load balancer sends everything to the surviving zones, but they can only handle "+c.cap+" requests per second. About "+c.drop+" per second are dropped.");SFX.soft()}else{cap("AZ-A failed. The load balancer stops sending traffic there, and the other zones have enough spare capacity. Users notice nothing.");SFX.ok()}}else cap("AZ-A is back and traffic spreads out again.")},
+ draw:function(){var P=this.P,c=this.calc(),h="",perLoad=c.H?Math.min(P.traffic/c.H,20)/20:0,cls=c.H&&P.traffic/c.H>=20?"u2":P.traffic/Math.max(c.H,1)>=14?"u1":"u0";
+  $("lbb").textContent=P.azs>1?"Elastic Load Balancer spreads requests across healthy instances in "+P.azs+" Availability Zones":"No second zone: nothing to balance across";
+  $("azs").style.gridTemplateColumns="repeat("+P.azs+",1fr)";
+  for(var a=0;a<P.azs;a++){var dn=P.fail&&a===0,ins="";for(var i=0;i<P.per;i++)ins+='<div class="iv '+(dn?"un":cls)+'">'+(dn?"down":Math.round(perLoad*100)+"%")+'<div class="br" style="width:'+(dn?0:perLoad*100)+'%"></div></div>';h+='<div class="az'+(dn?" dn":"")+'"><h4>'+azn(a)+(dn?" (failed)":"")+'</h4><div class="ins">'+ins+'</div></div>'}
+  $("azs").innerHTML=h;$("p1").textContent=c.cap;$("p1s").textContent=c.H+" healthy instances";var u=c.cap?Math.round(P.traffic/c.cap*100):999;$("p2").textContent=c.cap?u+"%":"–";$("p2").className="big "+(u>100?"no":u>70?"wn":"ok");$("p2s").textContent="Traffic divided by capacity";
+  $("p3").textContent=c.drop;$("p3").className="big "+(c.drop?"no":"ok");$("p3s").textContent=c.drop?"Customers see errors":"All requests served";
+  $("p4").textContent=c.surv?"Yes":"No";$("p4").className="big "+(c.surv?"ok":"no");$("p4s").textContent=P.azs<2?"Needs at least two zones":"Needs "+P.traffic+" with "+(P.azs-1)+" zone"+(P.azs>2?"s":"")+" left: has "+c.after+". Keep each zone under "+(P.azs>1?Math.round((P.azs-1)/P.azs*100):0)+"% busy."},
+ tick:function(){},render:function(){},
+ auto:function(){var P=this.P,me=this;seq([[function(){me.mount();cap("A typical start: two Availability Zones with three instances each, and 80 requests per second. That looks comfortable.")},6500],[function(){me.toggle()},9000],[function(){me.toggle();setS(P,"per",5);me.draw();cap("The fix: more headroom. With five instances per zone, one zone alone can carry the traffic.")},8000],[function(){me.toggle()},9000],[function(){me.toggle();setS(P,"azs",1);me.draw();cap("Now try a single zone. Everything is in one place.")},6000],[function(){me.toggle()},8000]])},reset:function(){this.mount()}};
+
+/* ---------- 2. load balancer in action ---------- */
+var E2={mount:function(){var P=this.P={a:2,b:4,traffic:40,cross:false},me=this;this.S={ha:[],hb:[],cnt:{}};
+ $("stage").innerHTML='<div class="ctl">'+slider("a","Instances in AZ-A",1,6,2)+slider("b","Instances in AZ-B",1,6,4)+slider("traffic","Traffic (requests per second)",10,100,40,5)+'</div><div class="row">'+chk("cross","Cross-zone load balancing")+'<button class="sm" id="hz">Fail AZ-A health checks</button><button class="sm" id="rc">Recover all</button><span class="kw">Click an instance to toggle its health check. Each instance handles 10 requests per second.</span></div>'+
+  '<div style="position:relative" id="lbb3"><div class="tag">Users</div><div class="nodes"><div class="nd" id="nA">Load balancer node in AZ-A<div class="sub" id="shA"></div></div><div class="nd" id="nB">Load balancer node in AZ-B<div class="sub" id="shB"></div></div></div><div class="cols"><div class="az"><h4>AZ-A</h4><div class="ins" id="insA"></div></div><div class="az"><h4>AZ-B</h4><div class="ins" id="insB"></div></div></div></div>'+
+  '<div class="grid">'+card("l1","Healthy targets")+card("l2","Busiest instance")+card("l3","Quietest instance")+card("l4","Overloaded instances")+'</div>';
+ bindS(P,["a","b","traffic"],function(){me.draw()});bindC(P,["cross"],function(){me.draw();me.explain()});$("hz").onclick=function(){initAudio();for(var i=0;i<6;i++)me.S.ha[i]=false;me.draw();cap("Every instance in AZ-A now fails its health check. The load balancer stops sending them traffic and sends it all to AZ-B instead.")};$("rc").onclick=function(){me.S.ha=[];me.S.hb=[];me.draw();cap("All health checks pass again.")};this.draw()},
+ healthy:function(z,i){var a=this.S[z==="A"?"ha":"hb"][i];return a!==false},
+ shares:function(){var P=this.P,hA=[],hB=[],i;for(i=0;i<P.a;i++)hA.push(this.healthy("A",i));for(i=0;i<P.b;i++)hB.push(this.healthy("B",i));var nA=hA.filter(Boolean).length,nB=hB.filter(Boolean).length,H=nA+nB,sA=[],sB=[];
+  if(!H)return {hA:hA,hB:hB,sA:hA.map(function(){return 0}),sB:hB.map(function(){return 0}),H:0,nodeA:0,nodeB:0};
+  if(P.cross){var nodeA=.5,nodeB=.5;hA.forEach(function(h){sA.push(h?1/H:0)});hB.forEach(function(h){sB.push(h?1/H:0)});return {hA:hA,hB:hB,sA:sA,sB:sB,H:H,nodeA:nodeA,nodeB:nodeB}}
+  var act=(nA?1:0)+(nB?1:0),nsh=1/act,nodeA2=nA?nsh:0,nodeB2=nB?nsh:0;hA.forEach(function(h){sA.push(h&&nA?nodeA2/nA:0)});hB.forEach(function(h){sB.push(h&&nB?nodeB2/nB:0)});return {hA:hA,hB:hB,sA:sA,sB:sB,H:H,nodeA:nodeA2,nodeB:nodeB2}},
+ draw:function(){var P=this.P,s=this.shares(),me=this;function box(z,i,h,sh){var rps=P.traffic*sh;return '<div class="iv cl '+(h?(rps>10?"u2":"u0"):"un")+'" data-z="'+z+'" data-i="'+i+'" id="i'+z+i+'">'+z+(i+1)+'<br>'+(h?rps.toFixed(1)+" rps":"unhealthy")+'<div class="br" style="width:'+Math.min(100,rps*10)+'%"></div></div>'}
+  var ha="",hb="";s.hA.forEach(function(h,i){ha+=box("A",i,h,s.sA[i])});s.hB.forEach(function(h,i){hb+=box("B",i,h,s.sB[i])});$("insA").innerHTML=ha;$("insB").innerHTML=hb;
+  Array.prototype.forEach.call($("lbb3").querySelectorAll(".iv"),function(e){e.onclick=function(){var z=e.getAttribute("data-z"),i=+e.getAttribute("data-i"),k=z==="A"?"ha":"hb";me.S[k][i]=!me.healthy(z,i);me.draw();cap(me.S[k][i]?"Instance "+z+(i+1)+" passes its health check again.":"Instance "+z+(i+1)+" failed its health check. The load balancer stops sending it traffic, and Auto Scaling can replace it.")}});
+  $("shA").textContent=Math.round(s.nodeA*100)+"% of users";$("shB").textContent=Math.round(s.nodeB*100)+"% of users";
+  var all=s.sA.filter(function(_,i){return s.hA[i]}).concat(s.sB.filter(function(_,i){return s.hB[i]})),mx=all.length?Math.max.apply(null,all):0,mn=all.length?Math.min.apply(null,all):0,ov=all.filter(function(x){return P.traffic*x>10}).length;
+  $("l1").textContent=s.H;$("l1s").textContent="of "+(P.a+P.b)+" registered";$("l2").textContent=(P.traffic*mx).toFixed(1);$("l2s").textContent="requests per second";$("l3").textContent=(P.traffic*mn).toFixed(1);$("l3s").textContent=mn>0&&mx/mn>1.2?"Imbalance: "+(mx/mn).toFixed(1)+" times busier":"Evenly spread";
+  $("l4").textContent=ov;$("l4").className="big "+(ov?"no":"ok");$("l4s").textContent=ov?"Past 10 requests per second":"All within capacity";this.sh=s},
+ explain:function(){var P=this.P,s=this.sh;if(!s||!s.H)return;if(P.cross)cap("Cross-zone is on. Every load balancer node can send to every healthy instance, so each instance gets an equal share.");else cap("Cross-zone is off. Each load balancer node only sends to instances in its own zone, and each node gets half of the traffic. With "+P.a+" instances in AZ-A and "+P.b+" in AZ-B, the load is uneven. Turn cross-zone on to even it out.")},
+ tick:function(dt){var s=this.sh,P=this.P;if(!s||!s.H||!$("lbb3"))return;var n=Math.min(4,Math.ceil(P.traffic*dt/6)),pool=[];s.sA.forEach(function(x,i){if(x>0)pool.push(["A",i,x,"A"])});s.sB.forEach(function(x,i){if(x>0)pool.push(["B",i,x,"B"])});if(!pool.length)return;
+  var b=$("lbb3"),br=b.getBoundingClientRect();for(var k=0;k<n;k++){var r=Math.random(),acc=0,t=pool[pool.length-1];for(var j=0;j<pool.length;j++){acc+=pool[j][2];if(r<=acc){t=pool[j];break}}
+   var from=$(t[3]==="A"?"nA":"nB"),to=$("i"+t[0]+t[1]);if(!from||!to)continue;var f=from.getBoundingClientRect(),g=to.getBoundingClientRect(),d=document.createElement("i");d.className="dt";d.style.left=(f.left+f.width/2-br.left)+"px";d.style.top=(f.bottom-br.top)+"px";b.appendChild(d);d.getBoundingClientRect();d.style.left=(g.left+g.width/2-br.left)+"px";d.style.top=(g.top-br.top)+"px";(function(d){setTimeout(function(){d.remove()},700)})(d)}},render:function(){},
+ auto:function(){var P=this.P,me=this;seq([[function(){me.mount();setS(P,"a",2);setS(P,"b",4);setS(P,"traffic",40);cap("Two zones, but uneven: two instances in AZ-A and four in AZ-B. Forty requests per second arrive. Cross-zone is off.")},7000],[function(){me.explain()},13000],[function(){setC(P,"cross",true);me.draw();me.explain()},11000],[function(){me.S.hb[0]=false;me.draw();cap("Now one instance in AZ-B fails its health check. The load balancer simply stops using it and spreads the traffic over the rest.")},9000],[function(){me.S.hb=[];for(var i=0;i<6;i++)me.S.ha[i]=false;me.draw();cap("Finally, all of AZ-A fails its checks. All traffic flows to AZ-B. This is how a load balancer hides a failed zone from users.")},9000]])},reset:function(){this.mount()}};
+
+/* ---------- 3. ALB vs NLB ---------- */
+var CH=[["Send /api and /images to different services","ALB","Only an Application Load Balancer can route by path."],["Millions of TCP connections with ultra-low latency","NLB","The Network Load Balancer works at layer 4 and is built for extreme performance."],["Partners must allow-list fixed IP addresses","NLB","An NLB gives a static IP or Elastic IP per AZ. An ALB has no static IP. You could put Global Accelerator in front of an ALB."],["Log users in with Cognito or OIDC before the app","ALB","Authentication actions are an ALB listener feature."],["UDP game server traffic","NLB","ALB only speaks HTTP and HTTPS. NLB supports TCP and UDP."],["Send HTTP requests to Lambda functions or containers","ALB","ALB supports Lambda, IP and instance targets."],["Pass TLS through without decrypting at the load balancer","NLB","NLB can pass TLS straight to the targets."],["Inspect all traffic with a third-party firewall appliance","GWLB","The Gateway Load Balancer is built to chain virtual appliances."]];
+var RULES=[["1","Path is /api/*","api-servers"],["2","Path is /images/*","static-servers"],["3","Host is admin.shop.com","admin-servers"],["default","everything else","web-servers"]];
+var E3={mount:function(){var me=this;this.S={mode:"alb",rr:{"api-servers":0,"static-servers":0,"admin-servers":0,"web-servers":0},cnt:{"api-servers":0,"static-servers":0,"admin-servers":0,"web-servers":0},conns:[],down:false,hit:-1};
+ var h='<div class="row"><div class="row" role="group" aria-label="Load balancer type"><button id="mA" aria-pressed="true">ALB: application (layer 7)</button><button id="mN" aria-pressed="false">NLB: network (layer 4)</button></div></div><div id="m3"></div><div class="row"><label class="sl">Which load balancer for this requirement? <select id="chs" class="sm"><option value="">Choose…</option>';
+ CH.forEach(function(c,i){h+='<option value="'+i+'">'+c[0]+'</option>'});$("stage").innerHTML=h+'</select></label></div><div class="rec" id="chr" hidden></div>';
+ $("mA").onclick=function(){me.S.mode="alb";me.view();cap("An Application Load Balancer reads each HTTP request. It looks at the path, host and headers, and picks a target group by rule.")};$("mN").onclick=function(){me.S.mode="nlb";me.view();cap("A Network Load Balancer works at the connection level. It doesn’t read HTTP. It picks a target for each new connection and keeps it there.")};
+ $("chs").onchange=function(){var c=CH[+this.value];if(!c){$("chr").hidden=true;return}$("chr").hidden=false;$("chr").innerHTML="<b>Choose "+({ALB:"an ALB",NLB:"an NLB",GWLB:"a Gateway Load Balancer"})[c[1]]+"</b>. "+c[2];cap("Choose "+c[1]+". "+c[2])};this.view()},
+ view:function(){var S=this.S,me=this;$("mA").setAttribute("aria-pressed",S.mode==="alb");$("mN").setAttribute("aria-pressed",S.mode==="nlb");var h="";
+  if(S.mode==="alb"){h='<div class="two"><div><div class="row"><button class="sm" data-r="GET|shop.com|/api/orders">GET /api/orders</button><button class="sm" data-r="POST|shop.com|/api/pay">POST /api/pay</button><button class="sm" data-r="GET|shop.com|/images/logo.png">GET /images/logo.png</button><button class="sm" data-r="GET|admin.shop.com|/dashboard">admin.shop.com/dashboard</button><button class="sm" data-r="GET|shop.com|/checkout">GET /checkout</button></div><table class="tbl"><tr><th>Priority</th><th>If</th><th>Forward to</th></tr>';
+   RULES.forEach(function(r,i){h+='<tr id="rr'+i+'"'+(S.hit===i?' class="hit"':"")+'><td>'+r[0]+'</td><td>'+r[1]+'</td><td>'+r[2]+'</td></tr>'});h+='</table><div class="sub" id="rq">Choose a request.</div></div><div>';
+   RULES.forEach(function(r){var n=({"api-servers":3,"static-servers":2,"admin-servers":1,"web-servers":3})[r[2]];h+='<div class="tg'+(S.hit>=0&&RULES[S.hit][2]===r[2]?" hit":"")+'"><b>'+r[2]+'</b> · '+n+' instances · health check /health<br>requests received: '+S.cnt[r[2]]+'</div>'});h+='</div></div>'}
+  else{h='<div class="two"><div><div class="row"><button class="sm" id="o10">Open 10 connections</button><button class="sm" id="s3">Send data on connection 3</button><button class="sm" id="fl">'+(S.down?"Recover target 2":"Fail target 2")+'</button></div><div class="tag">Static IP per AZ: 3.12.0.10 · 3.12.1.10</div> <div class="tag">Client IP preserved</div><div class="sub" id="nq">Open some connections.</div></div><div id="nt"></div></div>'}
+  $("m3").innerHTML=h;
+  if(S.mode==="alb")Array.prototype.forEach.call($("m3").querySelectorAll("[data-r]"),function(b){b.onclick=function(){initAudio();me.route(b.getAttribute("data-r").split("|"))}});
+  else{$("o10").onclick=function(){initAudio();me.open(10)};$("s3").onclick=function(){initAudio();me.send(3)};$("fl").onclick=function(){initAudio();me.fail()};this.nlbDraw()}},
+ route:function(r){var S=this.S,m=r[0],host=r[1],path=r[2],i=3;if(path.indexOf("/api/")===0)i=0;else if(path.indexOf("/images/")===0)i=1;else if(host==="admin.shop.com")i=2;var tg=RULES[i][2],n=({"api-servers":3,"static-servers":2,"admin-servers":1,"web-servers":3})[tg];S.hit=i;S.cnt[tg]++;var inst=S.rr[tg]++%n+1;this.view();
+  $("rq").textContent=m+" "+host+path+" → rule "+RULES[i][0]+" → "+tg+" → instance "+tg.split("-")[0]+"-"+inst+" (round robin)";SFX.tick();cap("The request for "+path+(i===2?" on the admin host":"")+" matched "+(i===3?"no special rule, so the default":"rule "+RULES[i][0])+" and went to "+tg+". The load balancer then picks one healthy instance in that group, in turn.")},
+ hash:function(p){return (p*2654435761>>>0)%3+1},
+ open:function(n){var S=this.S;for(var i=0;i<n;i++){var port=40000+S.conns.length*7+i*13,t=this.hash(port);if(S.down&&t===2)t=(t%3)+1;S.conns.push({n:S.conns.length+1,port:port,t:t,dead:false})}this.nlbDraw();SFX.up();cap("Ten new connections opened. The Network Load Balancer picked a target for each one using a hash of the connection details. Notice that each connection stays with its target for its whole life.")},
+ send:function(n){var S=this.S,c=S.conns[n-1];if(!c){cap("Open some connections first.");return}$("nq").textContent="Connection "+n+" sent data: it went to target "+c.t+" again. Same connection, same target.";SFX.tick();cap("Connection "+n+" sent more data. It went to target "+c.t+" again, because a connection sticks to one target.")},
+ fail:function(){var S=this.S;S.down=!S.down;if(S.down){S.conns.forEach(function(c){if(c.t===2)c.dead=true});cap("Target 2 failed its health check. New connections avoid it, and the connections that were on it are reset, so clients reconnect to another target.");SFX.soft()}else cap("Target 2 is healthy again and gets new connections.");this.view()},
+ nlbDraw:function(){var S=this.S,c=[0,0,0,0];S.conns.forEach(function(x){if(!x.dead)c[x.t]++});var h='<table class="tbl"><tr><th>Target</th><th>Live connections</th></tr>';for(var t=1;t<=3;t++)h+='<tr><td>target '+t+(S.down&&t===2?" (unhealthy)":"")+'</td><td>'+c[t]+'</td></tr>';h+='</table><div class="sub">'+S.conns.length+" opened, "+S.conns.filter(function(x){return x.dead}).length+" reset</div>";$("nt").innerHTML=h},
+ tick:function(){},render:function(){},
+ auto:function(){var me=this;seq([[function(){me.mount();cap("Start with the Application Load Balancer. It understands HTTP, so it can route by what is in the request.")},6500],[function(){me.route(["GET","shop.com","/api/orders"])},7000],[function(){me.route(["GET","shop.com","/images/logo.png"])},7000],[function(){me.route(["GET","admin.shop.com","/dashboard"])},7000],[function(){me.S.mode="nlb";me.view();cap("Now the Network Load Balancer. It works one level lower, on connections.")},6000],[function(){me.open(10)},11000],[function(){me.fail()},9000]])},reset:function(){this.mount()}};
+
+/* ---------- 4 and 5. Auto Scaling ---------- */
+function makeAS(full){return {mount:function(){var me=this,P=this.P=full?{traffic:80,min:3,max:9,target:50,warm:5,policy:"tt",fixed:3,elb:true,azmode:3}:{traffic:30,min:2,max:10,target:50,warm:5,policy:"tt",fixed:3,elb:true,azmode:3};
+ var S=this.S={t:0,inst:[],id:0,azUp:[1,1,1],desired:P.min,lastScale:-99,lastCheck:0,off:0,drop:0,win:[],hist:[],lastH:0,dbAz:0,dbUntil:0,wasDown:false};this.cap=20;for(var i=0;i<P.min;i++)this.launch(true);
+ var h='<div class="ctl">'+slider("traffic","Traffic (requests per second)",0,400,P.traffic,10);
+ if(!full)h+=slider("min","Minimum instances",1,6,P.min)+slider("max","Maximum instances",2,12,P.max)+slider("target","Target average CPU",30,80,50,5,"%")+slider("warm","Instance warm-up (seconds)",2,10,5)+'<label class="sl">Scaling policy<select id="pol" class="sm"><option value="tt">Target tracking (CPU)</option><option value="fx">Fixed size (no scaling)</option></select></label>'+slider("fixed","Fixed size",1,12,3);
+ else h+=slider("azmode","Availability Zones used by the group",1,3,3)+chk("elb","Auto Scaling uses load balancer health checks",true);
+ h+='</div><div class="row"><button class="sm" id="b1">Traffic surge (300)</button><button class="sm" id="b2">Quiet night (20)</button><button class="sm" id="b3">Terminate an instance</button><button class="sm" id="b4">Fail '+azn(full?0:1)+'</button><button class="sm" id="b5">Recover '+azn(full?0:1)+'</button>'+(full?'<button class="sm" id="b6">Hang 2 instances</button>':"")+'</div>'+
+  (full?'<div class="lbbar" id="lbb">Route 53 → Application Load Balancer across all zones: <span id="hc">0</span> healthy targets</div>':"")+'<div class="azs" id="azs" style="grid-template-columns:repeat(3,1fr)"></div><div class="grid">'+card("s1","Instances (in service / starting)")+card("s2","Average CPU")+card("s3","Requests dropped")+(full?card("s4","Availability (last 20 s)"):card("s4","Desired capacity"))+'</div><svg class="chart" id="ch" viewBox="0 0 300 80" preserveAspectRatio="none" role="img" aria-label="Traffic and capacity over time"></svg><div class="sub">Solid: traffic. Dashed: capacity of healthy instances.</div>';
+ $("stage").innerHTML=h;var ids=full?["traffic","azmode"]:["traffic","min","max","target","warm","fixed"];bindS(P,ids,function(k){if(k==="min"&&P.max<P.min)setS(P,"max",P.min);if(k==="azmode"){S.inst=S.inst.filter(function(x){return x.az<P.azmode});cap(P.azmode===1?"The group now uses one zone only. Instances in other zones are removed and rebuilt in that zone. If it fails, everything goes down.":"The group now spans "+P.azmode+" zones. Auto Scaling will spread instances evenly across them.")}});if(full)bindC(P,["elb"],function(){cap(P.elb?"Auto Scaling now also uses the load balancer’s health check, so it will replace instances that stop answering.":"Auto Scaling now uses only the basic EC2 checks. An instance that is running but not answering will not be replaced.")});
+ if(!full)$("pol").onchange=function(){P.policy=this.value;cap(P.policy==="tt"?"Target tracking keeps average CPU near the target by adding and removing instances.":"A fixed size never changes with traffic. Try a surge to see the problem.")};
+ $("b1").onclick=function(){initAudio();setS(P,"traffic",300);cap("A traffic surge: three hundred requests per second.");setTimeout(function(){setS(P,"traffic",full?80:30)},18000)};$("b2").onclick=function(){initAudio();setS(P,"traffic",20);cap("Quiet night. Twenty requests per second.")};$("b3").onclick=function(){initAudio();me.kill()};$("b4").onclick=function(){initAudio();me.failAz(full?0:1)};$("b5").onclick=function(){initAudio();me.recover(full?0:1)};if(full)$("b6").onclick=function(){initAudio();me.hang(2)};this.render()},
+ azList:function(){var P=this.P,S=this.S,l=[];for(var i=0;i<P.azmode&&i<3;i++)if(S.azUp[i])l.push(i);return l},
+ launch:function(now){var S=this.S,P=this.P,l=this.azList();if(!l.length)return false;var cnt=[0,0,0];S.inst.forEach(function(x){cnt[x.az]++});var best=l[0];l.forEach(function(a){if(cnt[a]<cnt[best])best=a});S.inst.push({id:++S.id,az:best,st:now?"ok":"pend",ready:S.t+P.warm,hungAt:0});return true},
+ kill:function(){var S=this.S,ok=S.inst.filter(function(x){return x.st==="ok"});if(!ok.length)return;var v=ok[Math.floor(Math.random()*ok.length)];S.inst=S.inst.filter(function(x){return x!==v});cap("An instance was terminated. Auto Scaling notices that the group is below its desired size and launches a replacement.");SFX.soft()},
+ failAz:function(i){var S=this.S;if(!S.azUp[i])return;S.azUp[i]=0;var n=S.inst.filter(function(x){return x.az===i}).length;S.inst=S.inst.filter(function(x){return x.az!==i});SFX.soft();
+  if(full&&S.dbAz===i){var nx=[0,1,2].filter(function(a){return S.azUp[a]})[0];if(nx!==undefined){S.dbAz=nx;S.dbUntil=S.t+6;nar("db","The database primary was in the failed zone. RDS Multi-AZ promotes the standby in another zone. Requests that need the database fail for a few seconds during the failover.")}}
+  cap(azn(i)+" failed and "+n+" instances went with it. The load balancer stops using that zone, and Auto Scaling launches replacements in the zones that are still up.")},
+ recover:function(i){var S=this.S;S.azUp[i]=1;cap(azn(i)+" is back. New instances can launch there again.");SFX.up()},
+ hang:function(n){var S=this.S,ok=S.inst.filter(function(x){return x.st==="ok"});for(var i=0;i<n&&ok.length;i++){var v=ok.splice(Math.floor(Math.random()*ok.length),1)[0];v.st="hung";v.hungAt=S.t}
+  cap(this.P.elb?"Two instances are running but have stopped answering. The load balancer stops sending them traffic, and because Auto Scaling uses load balancer health checks, it will replace them.":"Two instances are running but have stopped answering. The load balancer stops sending them traffic, but Auto Scaling only sees healthy EC2 checks, so it does not replace them. Capacity quietly shrinks.");SFX.soft()},
+ tick:function(dt){var S=this.S,P=this.P,me=this;S.t+=dt;S.inst.forEach(function(x){if(x.st==="pend"&&S.t>=x.ready)x.st="ok"});
+  if(P.elb)S.inst=S.inst.filter(function(x){if(x.st==="hung"&&S.t-x.hungAt>6){nar("rep","A hung instance was replaced. Auto Scaling saw it fail the load balancer’s health check, terminated it and launched a new one.");return false}return true});
+  var okN=S.inst.filter(function(x){return x.st==="ok"}).length,capN=okN*this.cap;if(full&&S.t<S.dbUntil)capN=0;var off=P.traffic*dt,srv=Math.min(off,capN*dt);S.win.push([off,srv]);if(S.win.length>100)S.win.shift();S.drop+=off-srv;
+  if(P.traffic>capN+1&&okN>0&&!(full&&S.t<S.dbUntil))nar("ov","Traffic is higher than the capacity of the healthy instances, so some requests are being dropped. New instances take a moment to warm up before they can help.");
+  var cpu=okN?P.traffic/(okN*this.cap)*100:100;
+  if(S.t-S.lastCheck>=2){S.lastCheck=S.t;
+   if(P.policy==="tt"){var need=okN?Math.ceil(okN*cpu/P.target):S.desired;if(need>S.desired){S.desired=Math.min(P.max,need);S.lastScale=S.t;nar("out","CPU is above the target, so Auto Scaling raises the desired capacity and launches instances. This is scaling out.");SFX.up()}
+    else if(need<S.desired&&S.t-S.lastScale>12&&cpu<P.target*.8){S.desired--;S.lastScale=S.t;nar("in","Traffic dropped and CPU is well under the target, so Auto Scaling removes an instance. This is scaling in. It does this slowly to stay safe.");SFX.down()}}
+   else S.desired=P.fixed;S.desired=clamp(S.desired,P.min,P.max);var al=this.azList();if(al.length>1&&S.inst.length>=S.desired&&!S.inst.some(function(x){return x.st==="pend"})){var cn=al.map(function(a){return S.inst.filter(function(x){return x.az===a}).length});if(Math.max.apply(null,cn)-Math.min.apply(null,cn)>1){this.launch(false);nar("rb","The zones are uneven, so Auto Scaling rebalances. It launches an instance in the emptiest zone first, then removes one from the fullest.")}}}
+  var cur=S.inst.length;while(cur<S.desired&&this.launch(false))cur++;
+  if(cur===0&&!this.azList().length)nar("out0","No Availability Zone is available to the group, so nothing can launch. With only one zone, a zone failure is a full outage.");
+  while(cur>S.desired){if(S.inst.some(function(x){return x.st==="pend"}))break;var cnt=[0,0,0];S.inst.forEach(function(x){cnt[x.az]++});var mx=0;for(var a=1;a<3;a++)if(cnt[a]>cnt[mx])mx=a;var vi=-1;S.inst.forEach(function(x,q){if(x.az===mx&&(vi<0||x.st!=="ok"))vi=q});if(vi<0)break;S.inst.splice(vi,1);cur--}
+  if(S.t-S.lastH>=.5){S.lastH=S.t;S.hist.push([P.traffic,capN]);if(S.hist.length>120)S.hist.shift()}},
+ render:function(){var S=this.S,P=this.P,h="",okN=0,pn=0;S.inst.forEach(function(x){if(x.st==="ok")okN++;else if(x.st==="pend")pn++});var cpu=okN?P.traffic/(okN*this.cap)*100:0;
+  for(var a=0;a<3;a++){var ins="",db="";S.inst.filter(function(x){return x.az===a}).forEach(function(x){var c=Math.min(100,okN?P.traffic/(okN*20)*100:0);ins+='<div class="iv '+(x.st==="pend"?"pend":x.st==="hung"?"hung":c>=100?"u2":c>=70?"u1":"u0")+'">#'+x.id+'<br>'+(x.st==="pend"?"starting":x.st==="hung"?"hung":Math.round(c)+"%")+'<div class="br" style="width:'+(x.st==="ok"?c:0)+'%"></div></div>'});
+   if(full)db='<div class="sub">'+(S.dbAz===a?'<span class="tag">RDS primary</span>':(S.azUp[a]?'<span class="tag">RDS standby</span>':""))+'</div>';
+   var unused=a>=P.azmode&&full;h+='<div class="az'+(S.azUp[a]?"":" dn")+'" style="'+(unused?"opacity:.4":"")+'"><h4>'+azn(a)+(S.azUp[a]?(unused?" (not used)":""):" (failed)")+'</h4><div class="ins">'+ins+'</div>'+db+'</div>'}
+  $("azs").innerHTML=h;$("s1").textContent=okN+" / "+pn;$("s1s").textContent=S.inst.length+" total in the group";$("s2").textContent=Math.round(cpu)+"%";$("s2").className="big "+(cpu>=100?"no":cpu>P.target*1.2?"wn":"ok");$("s2s").textContent="Target "+P.target+"%";
+  $("s3").textContent=Math.round(S.drop);$("s3").className="big "+(S.drop>5?"no":"ok");$("s3s").textContent="Requests lost so far";
+  if(full){var o=0,s=0;S.win.forEach(function(w){o+=w[0];s+=w[1]});var av=o?s/o*100:100;$("s4").textContent=av.toFixed(1)+"%";$("s4").className="big "+(av<99?"no":"ok");$("s4s").textContent="Share of requests served";$("hc").textContent=okN}else{$("s4").textContent=S.desired;$("s4s").textContent="Min "+P.min+", max "+P.max}
+  var hh=S.hist,mx=Math.max(100,Math.max.apply(null,hh.map(function(x){return Math.max(x[0],x[1])}))),a1="",b1="";hh.forEach(function(x,i){var X=i*300/119;a1+=X+","+(78-x[0]/mx*74)+" ";b1+=X+","+(78-x[1]/mx*74)+" "});
+  $("ch").innerHTML='<polyline fill="none" stroke="var(--accent)" stroke-width="2" points="'+a1+'"/><polyline fill="none" stroke="var(--a3)" stroke-width="2" stroke-dasharray="4 3" points="'+b1+'"/>'},
+ auto:function(){var P=this.P,me=this;if(!full)seq([[function(){me.mount();cap("A small group: two to ten instances across three Availability Zones, tracking fifty percent CPU. Thirty requests per second is easy.")},7000],[function(){setS(P,"traffic",300);cap("A surge to three hundred requests per second. Watch CPU jump, then Auto Scaling launch instances.")},15000],[function(){setS(P,"traffic",30);cap("The surge ends. Auto Scaling removes instances gradually.")},16000],[function(){me.failAz(1)},12000],[function(){me.recover(1);P.policy="fx";$("pol").value="fx";cap("Last, try a fixed size with no scaling policy. Press the traffic surge to see requests drop.")},8000]]);
+  else seq([[function(){me.mount();setC(me.P,"elb",false);me.P.elb=false;cap("The full picture: Route 53, a load balancer, an Auto Scaling group over three zones, and a Multi-AZ database. First, switch off the load balancer health check for the group.")},8000],[function(){me.hang(2)},12000],[function(){setC(P,"elb",true);cap("Now the group uses the load balancer health check. Watch the hung instances get replaced.")},9000],[function(){me.failAz(0)},14000],[function(){me.recover(0);setS(P,"traffic",300);cap("Finally, a traffic surge.")},16000]])},reset:function(){this.mount()}}}
+var E4=makeAS(false),E5=makeAS(true);
+
+/* ---------- 6. exam practice ---------- */
+var QS=[
+{t:"Survive a zone failure",sit:"A web application must stay online if one Availability Zone fails.",q:"What is the best design?",o:[{t:"An ALB with an Auto Scaling group spread across at least two Availability Zones.",p:10,fb:"The load balancer routes around a failed zone, and Auto Scaling replaces lost capacity."},{t:"Two instances in one Availability Zone behind an ALB.",p:5,fb:"It survives an instance failure, but not the loss of that zone."},{t:"One large instance with an Elastic IP.",p:0,fb:"A single point of failure."},{t:"A larger instance type.",p:0,fb:"Bigger doesn’t mean more available."}],why:"High availability means at least two zones."},
+{t:"Path-based routing",sit:"Requests to /api must go to one set of servers, and /images to another, using a single entry point.",q:"Which load balancer?",o:[{t:"An Application Load Balancer with path-based listener rules and two target groups.",p:10,fb:"Path routing is a layer 7 feature of the ALB."},{t:"One load balancer per service.",p:5,fb:"It works but costs more and adds complexity."},{t:"A Network Load Balancer.",p:0,fb:"NLB works on connections and can’t read paths."},{t:"Route 53 weighted records.",p:0,fb:"DNS can’t route by URL path."}],why:"Path, host or header routing points to ALB."},
+{t:"Static IPs and speed",sit:"A trading application uses TCP, needs millions of connections, ultra-low latency, and fixed IP addresses that partners can allow-list.",q:"What do you choose?",o:[{t:"A Network Load Balancer with Elastic IPs.",p:10,fb:"NLB is built for layer 4 performance and supports static IPs."},{t:"An ALB behind Global Accelerator.",p:5,fb:"That gives static IPs, but it is not the best fit for extreme TCP performance."},{t:"An ALB with an Elastic IP attached.",p:0,fb:"An ALB doesn’t support Elastic IPs."},{t:"A Classic Load Balancer.",p:0,fb:"Legacy, and not the right fit."}],why:"Static IP and extreme performance mean NLB."},
+{t:"Uneven load",sit:"An NLB has two instances in AZ-A and six in AZ-B. The AZ-A instances are overloaded while AZ-B is quiet.",q:"What is the simplest fix?",o:[{t:"Enable cross-zone load balancing.",p:10,fb:"Each node then spreads traffic across all registered instances in every zone."},{t:"Add instances to AZ-A until it matches.",p:5,fb:"It works, but costs more and has to be maintained."},{t:"Turn on sticky sessions.",p:0,fb:"Stickiness doesn’t even out zones."},{t:"Disable health checks.",p:0,fb:"That would send traffic to broken instances."}],why:"NLB cross-zone is off by default. An ALB has it on."},
+{t:"Running but frozen",sit:"One instance is running, but the application on it has hung. The EC2 status checks pass, and Auto Scaling isn’t replacing it.",q:"What do you change?",o:[{t:"Set the Auto Scaling group’s health check type to ELB.",p:10,fb:"The group then replaces instances that fail the load balancer’s health check."},{t:"Terminate the instance by hand each time.",p:5,fb:"It works but isn’t automatic."},{t:"Increase the desired capacity.",p:0,fb:"The frozen instance would still be there."},{t:"Reduce the cooldown.",p:0,fb:"Cooldown doesn’t affect health checks."}],why:"Enable ELB health checks on the Auto Scaling group."},
+{t:"Keep CPU steady",sit:"You want the web tier to hold average CPU near 50%, with as little configuration as possible.",q:"Which policy?",o:[{t:"Target tracking scaling on average CPU utilization.",p:10,fb:"You set the target and Auto Scaling does the math."},{t:"Step scaling with CloudWatch alarms.",p:5,fb:"It works but needs more setup."},{t:"Scheduled scaling.",p:0,fb:"It ignores real load."},{t:"A fixed group size.",p:0,fb:"It doesn’t adapt."}],why:"Target tracking is the simplest policy."},
+{t:"Predictable rush",sit:"Traffic jumps every weekday at 9 AM. Instances take several minutes to become ready, and users see slow responses at 9.",q:"What helps most?",o:[{t:"Scheduled scaling (or predictive scaling) to add capacity before 9 AM.",p:10,fb:"Capacity is ready before the rush starts."},{t:"Target tracking only.",p:5,fb:"It reacts, but it still lags while new instances warm up."},{t:"Manual changes each morning.",p:0,fb:"Error prone and not automatic."},{t:"A bigger load balancer.",p:0,fb:"The balancer isn’t the bottleneck."}],why:"Known patterns call for scheduled or predictive scaling."},
+{t:"Cut-off requests",sit:"When Auto Scaling scales in, users with in-flight requests see errors.",q:"What do you configure?",o:[{t:"Deregistration delay (connection draining) on the target group.",p:10,fb:"The instance finishes in-flight requests before it is removed."},{t:"Sticky sessions.",p:0,fb:"Stickiness pins users to instances. It doesn’t protect requests during scale-in."},{t:"Disable scale in.",p:5,fb:"It works but costs money, as instances never go away."},{t:"A shorter health check interval.",p:0,fb:"It doesn’t help in-flight requests."}],why:"Connection draining protects requests during scale-in."},
+{t:"Hidden headroom",sit:"A workload runs in two Availability Zones. Each zone is about 70% busy. The team believes the load balancer makes the design highly available.",q:"What is the problem?",o:[{t:"Losing a zone would push the other to about 140%, so you need more headroom or a third zone.",p:10,fb:"With two zones, each should stay under about 50% to survive losing one."},{t:"Auto Scaling will launch replacements, so it is fine.",p:5,fb:"Replacements take time. Meanwhile the surviving zone is overloaded."},{t:"Nothing. The ALB handles it.",p:0,fb:"The balancer moves traffic, but can’t create capacity."},{t:"Switch to an NLB.",p:0,fb:"The load balancer type doesn’t add capacity."}],why:"Plan N+1 capacity across zones."}];
+var qz={order:[],i:0,score:0,res:[],opts:[],ans:false};
+function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),x=a[i];a[i]=a[j];a[j]=x}return a}
+var EQ={mount:function(){$("stage").innerHTML='<div class="quiz"><div class="qtop"><span id="qprog"></span><span id="qscore"></span></div><div class="qbar"><i id="qb"></i></div><div id="qbody" aria-live="polite"></div></div>';
+ $("qbody").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;if(b.classList.contains("opt")){initAudio();ans(+b.getAttribute("data-k"))}else if(b.id==="qnext"){qz.i++;renderQ()}else if(b.id==="qretry")EQ.mount()});
+ qz.order=shuf(QS.map(function(_,i){return i}));qz.i=0;qz.score=0;qz.res=[];renderQ()},tick:function(){},render:function(){},reset:function(){this.mount()}};
+function renderQ(){var n=QS.length;if(qz.i>=n)return fin();var q=QS[qz.order[qz.i]];qz.opts=shuf(q.o);qz.ans=false;
+ $("qprog").textContent="Scenario "+(qz.i+1)+" of "+n;$("qscore").textContent="Score: "+qz.score+" / "+n*10;$("qb").style.width=(qz.i/n*100)+"%";
+ $("qbody").innerHTML='<h3>'+q.t+'</h3><p>'+q.sit+'</p><p><b>'+q.q+'</b></p><div class="opts">'+qz.opts.map(function(o,k){return '<button class="opt" data-k="'+k+'">'+o.t+'</button>'}).join("")+'</div><div class="fbk" id="fbk" hidden></div>';hush();say(q.sit+" "+q.q)}
+function ans(k){if(qz.ans)return;qz.ans=true;var q=QS[qz.order[qz.i]],o=qz.opts[k],p=o.p;qz.score+=p;qz.res.push({t:q.t,p:p});$("qscore").textContent="Score: "+qz.score+" / "+QS.length*10;
+ Array.prototype.forEach.call($("qbody").querySelectorAll(".opt"),function(b,j){var oo=qz.opts[j];b.disabled=true;b.classList.add(oo.p===10?"best":oo.p===5?"mid":"bad");if(j===k)b.classList.add("picked")});
+ var cls=p===10?"best":p===5?"mid":"bad",head=p===10?"Correct. +10":p===5?"Workable, but not the best answer. +5":"Not this one. +0",f=$("fbk");
+ f.className="fbk "+cls;f.hidden=false;f.innerHTML='<h4>'+head+'</h4><p>'+o.fb+'</p><p><b>Exam clue:</b> '+q.why+'</p><button class="go" id="qnext">'+(qz.i+1>=QS.length?"See my result":"Next scenario")+'</button>';
+ if(p===10)SFX.ok();else if(p===5){tone(440,.15);tone(523,.2,"sine",.03,.15)}else SFX.soft();hush();say(head+" "+o.fb+" "+q.why)}
+function fin(){var n=QS.length,max=n*10,s=qz.score,r=s>=max*.85?"Exam ready":s>=max*.55?"Getting there":"Keep practicing",m=s>=max*.85?"You can spot the clue words and pick the right service. That is the skill the exam rewards.":s>=max*.55?"Good instincts. Review the ones marked with a cross or a tilde, then try again.":"Revisit the labs above, then try again.";
+ $("qb").style.width="100%";$("qprog").textContent="Finished";$("qscore").textContent="Score: "+s+" / "+max;
+ $("qbody").innerHTML='<h3>'+r+': '+s+' / '+max+'</h3><p>'+m+'</p><ul>'+qz.res.map(function(x){return '<li>'+(x.p===10?"✓":x.p===5?"~":"✗")+" "+x.t+" ("+x.p+")</li>"}).join("")+'</ul><button class="go" id="qretry">Try again with a new order</button>';
+ if(s>=max*.55)SFX.ok();else SFX.soft();hush();say(r+". You scored "+s+" out of "+max+". "+m)}
+
+/* ---------- tabs ---------- */
+var T=[
+{tab:"1. Why multi-AZ",e:E1,name:"Why high availability needs more than one zone",a:"Two bridges across a river. If one closes, traffic uses the other, but only if the other can carry it all.",rule:"An Availability Zone is one or more data centers with their own power and network. Spreading across zones protects you from losing one, but the zones that remain must have enough spare capacity. Try failing a zone.",kw:"Exam clues: “highly available”, “survive an Availability Zone failure”, “single point of failure”."},
+{tab:"2. Load balancer at work",e:E2,name:"What a load balancer really does",a:"A host at a restaurant, seating guests only at tables that are open.",rule:"A load balancer has a node in each zone you enable. Users reach those nodes through DNS. Health checks keep traffic away from broken targets. Cross-zone decides whether a node may use targets in other zones.",kw:"Exam clues: health checks, cross-zone load balancing (on for ALB, off for NLB by default), healthy targets."},
+{tab:"3. ALB vs NLB",e:E3,name:"Application versus Network Load Balancer",a:"An ALB is a receptionist who reads every letter. An NLB is a switchboard that only connects calls.",rule:"The ALB understands HTTP and routes by path, host or header. The NLB works at layer 4 on TCP, UDP and TLS, with extreme speed and static IPs. The Gateway Load Balancer chains security appliances.",kw:"Exam clues: path-based routing → ALB. Static IP, UDP, millions of connections → NLB. Firewall appliances → GWLB."},
+{tab:"4. Auto Scaling",e:E4,name:"EC2 Auto Scaling: capacity that follows demand",a:"A restaurant that calls in more waiters when it fills up, and sends some home when it empties.",rule:"An Auto Scaling group keeps a desired number of instances between a minimum and a maximum, spread across zones. A scaling policy changes the desired number. Unhealthy instances are replaced automatically.",kw:"Exam clues: target tracking, scheduled scaling, warm-up, cooldown, replace unhealthy instances."},
+{tab:"5. Everything together",e:E5,name:"The complete highly available design",a:"A building with several fire exits, backup staff and a spare generator.",rule:"Users reach a load balancer that spans zones. It sends traffic to an Auto Scaling group in several zones. A Multi-AZ database fails over automatically. Break things and watch each layer react.",kw:"Exam clues: ALB + Auto Scaling across ≥2 AZs + Multi-AZ RDS. Use ELB health checks in the group."},
+{tab:"6. Exam practice",e:EQ,name:"Exam practice: pick the right design",a:"Real scenarios, the way the exam asks them.",rule:"Nine short scenarios. 10 points for the best answer, 5 for workable, 0 otherwise. Notice the clue words in each one."}];
+function show(i){runId++;hush();said={};tab=i;var t=T[i];sim.eng=t.e;$("tName").textContent=t.name;$("tAnalogy").textContent=t.a;$("tRule").textContent=t.rule;$("tKw").textContent=t.kw||"";
+ Array.prototype.forEach.call($("tabs").children,function(b,k){b.setAttribute("aria-pressed",k===i)});$("bPlay").hidden=!t.e.auto;$("bPause").hidden=$("bSpeed").hidden=!(i===1||i===3||i===4);$("bPlay").disabled=false;
+ t.e.mount();cap(i===5?"Choose an answer for each scenario.":"Move a slider or press a button. Or press Play story to watch a guided tour.",false)}
+T.forEach(function(t,i){var b=document.createElement("button");b.textContent=t.tab;b.onclick=function(){show(i)};$("tabs").appendChild(b)});
+setInterval(function(){if(sim.paused||!sim.eng)return;for(var k=0;k<sim.speed;k++)sim.eng.tick(.2);sim.eng.render()},200);
+$("bPlay").onclick=function(){initAudio();runId++;said={};sim.eng.reset();var id=runId;setTimeout(function(){if(id===runId)sim.eng.auto()},50)};
+$("bReset").onclick=function(){runId++;hush();said={};sim.eng.reset();$("bPlay").disabled=false;cap("Reset.",false)};
+$("bExplain").onclick=function(){initAudio();var t=T[tab];cap(t.a+" "+t.rule)};
+$("bPause").onclick=function(){sim.paused=!sim.paused;this.setAttribute("aria-pressed",sim.paused);this.textContent=sim.paused?"Resume":"Pause"};
+$("bSpeed").onclick=function(){sim.speed=sim.speed===1?2:sim.speed===2?4:1;this.textContent="Speed: "+sim.speed+"x"};
+$("bSound").onclick=function(){soundOn=!soundOn;this.setAttribute("aria-pressed",soundOn);this.textContent="Sound: "+(soundOn?"on":"off")};
+$("bVoice").onclick=function(){voiceOn=!voiceOn;this.setAttribute("aria-pressed",voiceOn);this.textContent="Voice: "+(voiceOn?"on":"off");if(!voiceOn)hush()};
+if(window.speechSynthesis){chooseVoice();speechSynthesis.onvoiceschanged=chooseVoice;$("vsel").onchange=function(){VX.auto=this.value==="";VX.voice=VX.auto?VX.list[0]||null:VX.list[+this.value];hush();say("Hello. This is how I will sound while I explain.")}}
+show(0);
+})();
+</script>
+</body>
+</html>
